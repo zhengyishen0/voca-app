@@ -28,8 +28,8 @@ mkdir -p "$FRAMEWORKS_DIR"
 # Copy executable
 cp "$EXECUTABLE" "$MACOS_DIR/"
 
-# Copy framework
-cp -R "Frameworks/VoicePipeline.framework" "$FRAMEWORKS_DIR/"
+# Copy framework (use ditto to preserve symlinks and structure)
+ditto "Frameworks/VoicePipeline.framework" "$FRAMEWORKS_DIR/VoicePipeline.framework"
 
 # Copy resources (assets folder)
 if [ -d ".build/release/Voca_Voca.bundle/Resources" ]; then
