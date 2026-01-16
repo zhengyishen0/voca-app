@@ -3,7 +3,8 @@
 .swiftpm/
 *.xcodeproj
 xcuserdata/
-DerivedData/
+.vscode
+
 
 # Models (downloaded on-demand)
 models/coreml/
