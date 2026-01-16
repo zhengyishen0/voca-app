@@ -10,11 +10,13 @@ class HotkeyMonitor {
 
     private var isRecordingAudio = false
 
-    // Double-tap detection for CMD key
-    private var lastCmdPressTime: Date?
-    private var cmdTapCount = 0
-    private var isCmdHeld = false
-    private let doubleTapThreshold: TimeInterval = 0.3  // 300ms between taps
+    // Hold-to-record state
+    private var isModifierHeld = false
+
+    // Double-tap detection state
+    private var lastTapTime: Date?
+    private var tapCount = 0
+    private let doubleTapThreshold: TimeInterval = 0.3
 
     // History hotkey: Ctrl+Option+V
     private let historyKeyCode: UInt16 = 0x09  // V
@@ -46,7 +48,7 @@ class HotkeyMonitor {
     }
 
     private func handleEvent(_ event: NSEvent) {
-        // Check for history hotkey (Ctrl+Shift+V)
+        // Check for history hotkey (Ctrl+Option+V)
         if event.type == .keyDown {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if event.keyCode == historyKeyCode && flags == historyModifiers {
@@ -55,45 +57,82 @@ class HotkeyMonitor {
             }
         }
 
-        // Handle double-tap CMD for recording
-        handleDoubleTapCmd(event)
+        // Handle recording hotkey
+        let hotkey = AppSettings.shared.recordHotkey
+        if hotkey.isDoubleTap {
+            handleDoubleTapToRecord(event)
+        } else {
+            handleHoldToRecord(event)
+        }
     }
 
-    private func handleDoubleTapCmd(_ event: NSEvent) {
+    private func handleHoldToRecord(_ event: NSEvent) {
         guard event.type == .flagsChanged else { return }
 
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let cmdPressed = flags.contains(.command)
+        let hotkey = AppSettings.shared.recordHotkey
+        let requiredModifiers = NSEvent.ModifierFlags(rawValue: hotkey.modifiers)
+        let currentFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-        // CMD key pressed
-        if cmdPressed && !isCmdHeld {
-            isCmdHeld = true
+        // Check if exactly the required modifiers are pressed
+        let modifiersMatch = currentFlags == requiredModifiers
+
+        // Modifiers pressed - start recording
+        if modifiersMatch && !isModifierHeld {
+            isModifierHeld = true
+            if !isRecordingAudio {
+                isRecordingAudio = true
+                onRecordStart()
+            }
+        }
+        // Modifiers released - stop recording
+        else if !modifiersMatch && isModifierHeld {
+            isModifierHeld = false
+            if isRecordingAudio {
+                isRecordingAudio = false
+                onRecordStop()
+            }
+        }
+    }
+
+    private func handleDoubleTapToRecord(_ event: NSEvent) {
+        guard event.type == .flagsChanged else { return }
+
+        let hotkey = AppSettings.shared.recordHotkey
+        let requiredModifiers = NSEvent.ModifierFlags(rawValue: hotkey.modifiers)
+        let currentFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // Check if the required modifier is pressed (allows other modifiers too)
+        let modifierPressed = currentFlags.contains(requiredModifiers)
+
+        // Modifier key pressed
+        if modifierPressed && !isModifierHeld {
+            isModifierHeld = true
             let now = Date()
 
-            if let lastPress = lastCmdPressTime,
-               now.timeIntervalSince(lastPress) < doubleTapThreshold {
-                // Double-tap detected! Start recording
-                cmdTapCount = 2
+            if let lastTap = lastTapTime,
+               now.timeIntervalSince(lastTap) < doubleTapThreshold {
+                // Double-tap detected - start recording
+                tapCount = 2
                 if !isRecordingAudio {
                     isRecordingAudio = true
                     onRecordStart()
                 }
             } else {
                 // First tap
-                cmdTapCount = 1
-                lastCmdPressTime = now
+                tapCount = 1
+                lastTapTime = now
             }
         }
-        // CMD key released
-        else if !cmdPressed && isCmdHeld {
-            isCmdHeld = false
+        // Modifier key released
+        else if !modifierPressed && isModifierHeld {
+            isModifierHeld = false
 
-            // If we were recording (double-tap was active), stop recording
+            // If we were recording, stop
             if isRecordingAudio {
                 isRecordingAudio = false
                 onRecordStop()
-                cmdTapCount = 0
-                lastCmdPressTime = nil
+                tapCount = 0
+                lastTapTime = nil
             }
         }
     }

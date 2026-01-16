@@ -6,119 +6,13 @@ enum RecordingState {
     case processing
 }
 
-// MARK: - Custom View for Model Menu Items
-
-class ModelMenuItemView: NSView {
-    private let leftLabel = NSTextField(labelWithString: "")
-    private let rightLabel = NSTextField(labelWithString: "")
-    private let checkmark = NSTextField(labelWithString: "")
-
-    var isSelected: Bool = false {
-        didSet { checkmark.stringValue = isSelected ? "✓" : "" }
-    }
-
-    var rightText: String = "" {
-        didSet { rightLabel.stringValue = rightText }
-    }
-
-    var onClicked: (() -> Void)?
-
-    private var isHighlighted = false {
-        didSet { needsDisplay = true }
-    }
-
-    init(title: String, width: CGFloat = 250) {
-        // Width matches menu with keyEquivalent column (~250 for alignment with ⌘Q)
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 22))
-
-        // Checkmark on the left
-        checkmark.font = NSFont.menuFont(ofSize: 0)
-        checkmark.textColor = .labelColor
-        checkmark.alignment = .left
-        checkmark.isBordered = false
-        checkmark.isEditable = false
-        checkmark.backgroundColor = .clear
-        checkmark.frame = NSRect(x: 6, y: 2, width: 16, height: 18)
-        addSubview(checkmark)
-
-        // Model name
-        leftLabel.stringValue = title
-        leftLabel.font = NSFont.menuFont(ofSize: 0)
-        leftLabel.textColor = .labelColor
-        leftLabel.alignment = .left
-        leftLabel.isBordered = false
-        leftLabel.isEditable = false
-        leftLabel.backgroundColor = .clear
-        leftLabel.frame = NSRect(x: 24, y: 2, width: 120, height: 18)
-        addSubview(leftLabel)
-
-        // Right indicator - positioned to align with keyEquivalent column (⌘Q)
-        rightLabel.font = NSFont.menuFont(ofSize: 0)
-        rightLabel.textColor = .secondaryLabelColor
-        rightLabel.alignment = .right
-        rightLabel.isBordered = false
-        rightLabel.isEditable = false
-        rightLabel.backgroundColor = .clear
-        rightLabel.frame = NSRect(x: width - 45, y: 2, width: 35, height: 18)
-        addSubview(rightLabel)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        if isHighlighted {
-            NSColor.selectedContentBackgroundColor.setFill()
-            bounds.fill()
-            leftLabel.textColor = .white
-            checkmark.textColor = .white
-            rightLabel.textColor = .white.withAlphaComponent(0.8)
-        } else {
-            leftLabel.textColor = .labelColor
-            checkmark.textColor = .labelColor
-            rightLabel.textColor = .secondaryLabelColor
-        }
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHighlighted = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHighlighted = false
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        onClicked?()
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        for area in trackingAreas {
-            removeTrackingArea(area)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInActiveApp],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-    }
-}
-
 class StatusBarController: NSObject {
     private var statusItem: NSStatusItem!
     private var menu: NSMenu!
-
-    // Model menu items and views (for updating state/progress)
-    private var modelMenuItems: [ASRModel: NSMenuItem] = [:]
-    private var modelMenuViews: [ASRModel: ModelMenuItemView] = [:]
+    private var hintItem: NSMenuItem!
 
     private let onModelChange: (ASRModel) -> Void
     private let historyManager: HistoryManager
-    private let modelManager = ModelManager.shared
 
     init(onModelChange: @escaping (ASRModel) -> Void,
          historyManager: HistoryManager) {
@@ -129,7 +23,7 @@ class StatusBarController: NSObject {
 
         setupStatusItem()
         setupMenu()
-        setupModelManagerCallbacks()
+        setupNotifications()
     }
 
     private func setupStatusItem() {
@@ -150,30 +44,11 @@ class StatusBarController: NSObject {
     private func setupMenu() {
         menu = NSMenu()
 
-        // Hint at top - show ⌘ on the right
-        let hintItem = NSMenuItem(title: "Double-\u{2318} and hold to record", action: nil, keyEquivalent: "\u{2318}")
+        // Hint at top - shows current shortcut
+        hintItem = NSMenuItem(title: "Hold to record", action: nil, keyEquivalent: "")
         hintItem.isEnabled = false
+        updateHintText()
         menu.addItem(hintItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Models section header
-        let modelsHeader = NSMenuItem(title: "Models", action: nil, keyEquivalent: "")
-        modelsHeader.isEnabled = false
-        menu.addItem(modelsHeader)
-
-        // Model items (using custom views to prevent menu dismissal)
-        for model in ASRModel.availableModels {
-            let item = NSMenuItem()
-            let view = ModelMenuItemView(title: model.shortName)
-            view.onClicked = { [weak self] in
-                self?.handleModelClick(model)
-            }
-            item.view = view
-            modelMenuItems[model] = item
-            modelMenuViews[model] = view
-            menu.addItem(item)
-        }
 
         // History section - separator, header, and items added dynamically in menuWillOpen
         // Tag 200 marks the position where history section starts
@@ -182,6 +57,11 @@ class StatusBarController: NSObject {
         menu.addItem(historySeparator)
 
         menu.addItem(NSMenuItem.separator())
+
+        // Settings
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(settingsClicked), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
         // Check for Updates
         let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
@@ -209,44 +89,33 @@ class StatusBarController: NSObject {
         return item
     }
 
-    private func setupModelManagerCallbacks() {
-        modelManager.onStatusChanged = { [weak self] model, status in
-            DispatchQueue.main.async {
-                self?.updateModelMenuItem(model, status: status)
-            }
+    private func setupNotifications() {
+        // Listen for model changes from Settings window
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleModelChanged(_:)),
+            name: .modelChanged,
+            object: nil
+        )
+    }
+
+    @objc private func handleModelChanged(_ notification: Notification) {
+        if let model = notification.object as? ASRModel {
+            onModelChange(model)
         }
     }
 
-    private func updateModelMenuItem(_ model: ASRModel, status: ModelStatus) {
-        guard let view = modelMenuViews[model] else { return }
-
-        let isSelected = AppSettings.shared.selectedModel == model
-        view.isSelected = isSelected
-
-        switch status {
-        case .notDownloaded:
-            view.rightText = "↓"
-        case .downloading(let progress):
-            let percent = Int(progress * 100)
-            view.rightText = "\(percent)%"
-        case .downloaded:
-            view.rightText = ""
-        case .error:
-            view.rightText = "✗"
+    private func updateHintText() {
+        let hotkey = AppSettings.shared.recordHotkey
+        if hotkey.isDoubleTap {
+            hintItem.title = "Double-tap \(hotkey.symbolString) to record"
+        } else {
+            hintItem.title = "Hold \(hotkey.symbolString) to record"
         }
     }
 
-    private func handleModelClick(_ model: ASRModel) {
-        // If model not downloaded, start download (menu stays open)
-        if !modelManager.isModelDownloaded(model) {
-            modelManager.downloadModel(model)
-            return
-        }
-
-        // Model is downloaded, select it
-        AppSettings.shared.selectedModel = model
-        updateSelectedModel(model)
-        onModelChange(model)
+    @objc private func settingsClicked() {
+        SettingsWindowController.shared.show()
     }
 
     @objc private func aboutClicked() {
@@ -271,12 +140,6 @@ class StatusBarController: NSObject {
             button.image = createIcon("circle.dashed", size: 18)
             button.image?.isTemplate = false
             button.contentTintColor = .systemOrange
-        }
-    }
-
-    func updateSelectedModel(_ model: ASRModel) {
-        for (itemModel, view) in modelMenuViews {
-            view.isSelected = itemModel == model
         }
     }
 
@@ -408,13 +271,8 @@ class StatusBarController: NSObject {
 
 extension StatusBarController: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        // Update model statuses
-        modelManager.checkAllModelStatus()
-        for model in ASRModel.availableModels {
-            if let status = modelManager.modelStatus[model] {
-                updateModelMenuItem(model, status: status)
-            }
-        }
+        // Update hint text in case shortcut changed
+        updateHintText()
 
         // Remove old history items (tags 201+)
         while let item = menu.item(withTag: 201) {

@@ -26,6 +26,14 @@ enum ASRModel: String, CaseIterable {
         case .parakeet: return "Parakeet"
         }
     }
+
+    var languageHint: String {
+        switch self {
+        case .senseVoice: return "中/En/日/한/粤"
+        case .whisperTurbo: return "Multi-Language"
+        case .parakeet: return "Best for English"
+        }
+    }
 }
 
 struct Hotkey: Codable, Equatable {
@@ -41,13 +49,24 @@ struct Hotkey: Codable, Equatable {
 
     static let defaultRecord = option
 
+    // Double-tap hotkeys use a special keyCode (0xFFFE) to indicate double-tap mode
+    static let doubleOption = Hotkey(keyCode: 0xFFFE, modifiers: NSEvent.ModifierFlags.option.rawValue)
+    static let doubleCommand = Hotkey(keyCode: 0xFFFE, modifiers: NSEvent.ModifierFlags.command.rawValue)
+    static let doubleControl = Hotkey(keyCode: 0xFFFE, modifiers: NSEvent.ModifierFlags.control.rawValue)
+
     static let presets: [(name: String, hotkey: Hotkey)] = [
+        ("Double ⌥ Option", doubleOption),
+        ("Double ⌘ Command", doubleCommand),
+        ("Double ⌃ Control", doubleControl),
         ("⌥ Option", option),
         ("⌥⇧ Option+Shift", optionShift),
         ("⌥⌘ Option+Command", optionCommand),
         ("⌃⌥ Control+Option", controlOption),
-        ("⌥⇧⌘ Option+Shift+Command", optionShiftCommand),
     ]
+
+    var isDoubleTap: Bool {
+        keyCode == 0xFFFE
+    }
 
     /// Display string with Mac symbols
     var symbolString: String {
@@ -99,6 +118,7 @@ class AppSettings {
     private enum Keys {
         static let selectedModel = "selectedModel"
         static let recordHotkey = "recordHotkey"
+        static let inputDeviceUID = "inputDeviceUID"
     }
 
     var selectedModel: ASRModel {
@@ -126,6 +146,16 @@ class AppSettings {
             if let data = try? JSONEncoder().encode(newValue) {
                 defaults.set(data, forKey: Keys.recordHotkey)
             }
+        }
+    }
+
+    /// Selected input device UID (empty string = system default)
+    var inputDeviceUID: String {
+        get {
+            defaults.string(forKey: Keys.inputDeviceUID) ?? ""
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.inputDeviceUID)
         }
     }
 

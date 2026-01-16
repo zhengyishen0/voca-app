@@ -98,7 +98,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let settings = AppSettings.shared
         transcriber.setModel(settings.selectedModel)
-        statusBarController.updateSelectedModel(settings.selectedModel)
 
         print("Voca started")
         print("Double-tap ⌘ to record, release to transcribe")
