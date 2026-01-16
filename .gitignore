@@ -4,6 +4,7 @@
 *.xcodeproj
 xcuserdata/
 .vscode
+dist/
 
 
 # Models (downloaded on-demand)
