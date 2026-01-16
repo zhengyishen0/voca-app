@@ -31,6 +31,12 @@ cp "$EXECUTABLE" "$MACOS_DIR/"
 # Copy framework (use ditto to preserve symlinks and structure)
 ditto "Frameworks/VoicePipeline.framework" "$FRAMEWORKS_DIR/VoicePipeline.framework"
 
+# Copy ONNX Runtime library (required by VoicePipeline)
+if [ -f "Frameworks/libonnxruntime.1.17.0.dylib" ]; then
+    cp "Frameworks/libonnxruntime.1.17.0.dylib" "$FRAMEWORKS_DIR/"
+    echo "Copied libonnxruntime.1.17.0.dylib"
+fi
+
 # Copy resources (assets folder)
 if [ -d ".build/release/Voca_Voca.bundle/Resources" ]; then
     cp -R ".build/release/Voca_Voca.bundle/Resources/"* "$RESOURCES_DIR/"
