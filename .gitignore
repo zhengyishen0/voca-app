@@ -1,0 +1,17 @@
+# Build artifacts
+.build/
+.swiftpm/
+*.xcodeproj
+xcuserdata/
+DerivedData/
+
+# Models (downloaded on-demand)
+models/coreml/
+
+# macOS
+.DS_Store
+*.dSYM
+
+# Temporary
+*.log
+tmp/
