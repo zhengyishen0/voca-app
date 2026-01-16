@@ -70,11 +70,11 @@ jobs:
             echo "Signed libonnxruntime.1.17.0.dylib"
           fi
 
-          # Sign SPM resource bundle
-          if [ -d "dist/Voca.app/Contents/MacOS/Voca_Voca.bundle" ]; then
+          # Sign SPM resource bundle (at app root)
+          if [ -d "dist/Voca.app/Voca_Voca.bundle" ]; then
             codesign --force --options runtime --timestamp \
               --sign "$IDENTITY" \
-              "dist/Voca.app/Contents/MacOS/Voca_Voca.bundle"
+              "dist/Voca.app/Voca_Voca.bundle"
             echo "Signed Voca_Voca.bundle"
           fi
 

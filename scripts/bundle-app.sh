@@ -37,10 +37,10 @@ if [ -f "Frameworks/libonnxruntime.1.17.0.dylib" ]; then
     echo "Copied libonnxruntime.1.17.0.dylib"
 fi
 
-# Copy SPM resource bundle next to executable (Bundle.module looks here)
+# Copy SPM resource bundle to app root (Bundle.module looks here)
 if [ -d ".build/release/Voca_Voca.bundle" ]; then
-    cp -R ".build/release/Voca_Voca.bundle" "$MACOS_DIR/"
-    echo "Copied Voca_Voca.bundle to MacOS/"
+    cp -R ".build/release/Voca_Voca.bundle" "$APP_DIR/"
+    echo "Copied Voca_Voca.bundle to app root"
 fi
 
 # Copy app icon
