@@ -112,7 +112,7 @@ class AboutWindowController: NSWindowController {
     }
 
     @objc private func openGitHub() {
-        if let url = URL(string: "https://github.com/anthropics/claude-code") {
+        if let url = URL(string: "https://github.com/zhengyishen0/voca-app") {
             NSWorkspace.shared.open(url)
         }
     }

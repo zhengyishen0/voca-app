@@ -207,7 +207,9 @@ class StatusBarController: NSObject {
                     alert.addButton(withTitle: NSLocalizedString("Later", comment: ""))
 
                     if alert.runModal() == .alertFirstButtonReturn {
-                        if let downloadURL = URL(string: "https://github.com/zhengyishen0/voca-app/releases/latest") {
+                        // Direct download URL for the DMG
+                        let dmgURL = "https://github.com/zhengyishen0/voca-app/releases/download/\(tagName)/Voca-\(latestVersion).dmg"
+                        if let downloadURL = URL(string: dmgURL) {
                             NSWorkspace.shared.open(downloadURL)
                         }
                     }
@@ -309,7 +311,7 @@ extension StatusBarController: NSMenuDelegate {
 
         // Add history items if any
         for (i, text) in history.prefix(3).enumerated() {
-            let preview = truncateToWidth(text, maxWidth: 300)
+            let preview = truncateToWidth(text, maxWidth: 200)
             let item = NSMenuItem(
                 title: "  \(preview)",
                 action: #selector(historyItemClicked(_:)),

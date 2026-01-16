@@ -213,29 +213,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Copy to clipboard
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        let success = pasteboard.setString(text, forType: .string)
+        print("📋 Clipboard set: \(success), text length: \(text.count)")
 
         // Check accessibility permission
-        guard AXIsProcessTrusted() else {
+        let trusted = AXIsProcessTrusted()
+        print("🔐 Accessibility trusted: \(trusted)")
+
+        guard trusted else {
             print("⚠️ Accessibility not granted - text copied to clipboard, please paste manually")
             return
         }
 
         // Simulate Cmd+V after a delay to ensure focus returns to target app
+        print("⏳ Scheduling paste in 0.1s...")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.simulatePaste()
         }
     }
 
     private func simulatePaste() {
+        print("🎹 simulatePaste() called")
+
         // Based on Maccy clipboard manager implementation
         // https://github.com/p0deje/Maccy/blob/master/Maccy/Clipboard.swift
         let vKeyCode: CGKeyCode = 0x09  // V key
 
         let source = CGEventSource(stateID: .hidSystemState)
+        print("  - Event source created: \(source != nil)")
 
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true)
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false)
+        print("  - KeyDown event: \(keyDown != nil), KeyUp event: \(keyUp != nil)")
 
         // Command flag with non-coalesced marker (0x000008) as used by Maccy
         let cmdFlag = CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x000008)
@@ -245,6 +254,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Post to cgSessionEventTap (not cghidEventTap)
         keyDown?.post(tap: .cgSessionEventTap)
         keyUp?.post(tap: .cgSessionEventTap)
+        print("  - Events posted to cgSessionEventTap")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
