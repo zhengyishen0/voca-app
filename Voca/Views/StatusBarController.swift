@@ -9,12 +9,13 @@ enum RecordingState {
 class StatusBarController: NSObject {
     private var statusItem: NSStatusItem!
     private var menu: NSMenu!
-    private var modelSubmenu: NSMenu!
-    private var modelMenuItems: [NSMenuItem] = []
-    private var historySubmenu: NSMenu!
+
+    // Model menu items (for updating state/progress)
+    private var modelMenuItems: [ASRModel: NSMenuItem] = [:]
 
     private let onModelChange: (ASRModel) -> Void
     private let historyManager: HistoryManager
+    private let modelManager = ModelManager.shared
 
     init(onModelChange: @escaping (ASRModel) -> Void,
          historyManager: HistoryManager) {
@@ -25,6 +26,7 @@ class StatusBarController: NSObject {
 
         setupStatusItem()
         setupMenu()
+        setupModelManagerCallbacks()
     }
 
     private func setupStatusItem() {
@@ -45,30 +47,54 @@ class StatusBarController: NSObject {
     private func setupMenu() {
         menu = NSMenu()
 
-        // Model submenu
-        let modelItem = NSMenuItem(title: "Model", action: nil, keyEquivalent: "")
-        modelSubmenu = NSMenu()
-        for model in ASRModel.allCases {
+        // Hint at top
+        let hintItem = NSMenuItem(title: "⌘⌘ to record", action: nil, keyEquivalent: "")
+        hintItem.isEnabled = false
+        menu.addItem(hintItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Models section header
+        let modelsHeader = NSMenuItem(title: "Models", action: nil, keyEquivalent: "")
+        modelsHeader.isEnabled = false
+        menu.addItem(modelsHeader)
+
+        // Model items (only available models)
+        for model in ASRModel.availableModels {
             let item = NSMenuItem(
-                title: model.displayName,
+                title: "  \(model.shortName)",
                 action: #selector(modelSelected(_:)),
                 keyEquivalent: ""
             )
             item.target = self
             item.representedObject = model
-            modelMenuItems.append(item)
-            modelSubmenu.addItem(item)
+            item.indentationLevel = 1
+            modelMenuItems[model] = item
+            menu.addItem(item)
         }
-        modelItem.submenu = modelSubmenu
-        menu.addItem(modelItem)
-
-        // History submenu
-        let historyItem = NSMenuItem(title: "History", action: nil, keyEquivalent: "")
-        historySubmenu = NSMenu()
-        historyItem.submenu = historySubmenu
-        menu.addItem(historyItem)
 
         menu.addItem(NSMenuItem.separator())
+
+        // History section header with shortcut hint
+        let historyHeader = createHistoryHeader()
+        menu.addItem(historyHeader)
+
+        // History items will be populated dynamically
+        // (placeholder items that will be replaced in menuWillOpen)
+        for i in 1...3 {
+            let item = NSMenuItem(title: "  \(i). (empty)", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            item.tag = 100 + i  // Tag for identification
+            item.indentationLevel = 1
+            menu.addItem(item)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Check for Updates
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
 
         // About
         let aboutItem = NSMenuItem(title: "About Voca", action: #selector(aboutClicked), keyEquivalent: "")
@@ -84,6 +110,71 @@ class StatusBarController: NSObject {
         menu.delegate = self
     }
 
+    private func createHistoryHeader() -> NSMenuItem {
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item.isEnabled = false
+
+        // Create attributed string with "History" on left and "⌃⌥V" on right
+        let title = "History"
+        let shortcut = "⌃⌥V"
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.tabStops = [NSTextTab(textAlignment: .right, location: 200)]
+
+        let attributed = NSMutableAttributedString(
+            string: "\(title)\t\(shortcut)",
+            attributes: [
+                .font: NSFont.menuFont(ofSize: 0),
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+
+        // Make shortcut gray
+        let shortcutRange = (attributed.string as NSString).range(of: shortcut)
+        attributed.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: shortcutRange)
+
+        item.attributedTitle = attributed
+        return item
+    }
+
+    private func setupModelManagerCallbacks() {
+        modelManager.onStatusChanged = { [weak self] model, status in
+            DispatchQueue.main.async {
+                self?.updateModelMenuItem(model, status: status)
+            }
+        }
+    }
+
+    private func updateModelMenuItem(_ model: ASRModel, status: ModelStatus) {
+        guard let item = modelMenuItems[model] else { return }
+
+        let isSelected = AppSettings.shared.selectedModel == model
+
+        switch status {
+        case .notDownloaded:
+            item.title = "  \(model.shortName) ↓"
+            item.state = isSelected ? .on : .off
+            item.isEnabled = true
+
+        case .downloading(let progress):
+            let percent = Int(progress * 100)
+            item.title = "  \(model.shortName) \(percent)%"
+            item.state = .off
+            item.isEnabled = false
+
+        case .downloaded:
+            item.title = "  \(model.shortName)"
+            item.state = isSelected ? .on : .off
+            item.isEnabled = true
+
+        case .error(let message):
+            item.title = "  \(model.shortName) ✗"
+            item.toolTip = message
+            item.state = isSelected ? .on : .off
+            item.isEnabled = true
+        }
+    }
+
     @objc private func aboutClicked() {
         AboutWindowController.shared.show()
     }
@@ -93,19 +184,16 @@ class StatusBarController: NSObject {
 
         switch state {
         case .idle:
-            // Normal waveform icon (template = follows system appearance)
             button.image = createIcon("waveform.circle.fill", size: 18)
             button.image?.isTemplate = true
             button.contentTintColor = nil
 
         case .recording:
-            // Red recording indicator
             button.image = createIcon("record.circle.fill", size: 18)
             button.image?.isTemplate = false
             button.contentTintColor = .systemRed
 
         case .processing:
-            // Processing indicator (gear spinning feel)
             button.image = createIcon("circle.dashed", size: 18)
             button.image?.isTemplate = false
             button.contentTintColor = .systemOrange
@@ -113,13 +201,21 @@ class StatusBarController: NSObject {
     }
 
     func updateSelectedModel(_ model: ASRModel) {
-        for item in modelMenuItems {
-            item.state = (item.representedObject as? ASRModel) == model ? .on : .off
+        for (itemModel, item) in modelMenuItems {
+            item.state = itemModel == model ? .on : .off
         }
     }
 
     @objc private func modelSelected(_ sender: NSMenuItem) {
         guard let model = sender.representedObject as? ASRModel else { return }
+
+        // If model not downloaded, start download
+        if !modelManager.isModelDownloaded(model) {
+            modelManager.downloadModel(model)
+            return
+        }
+
+        // Model is downloaded, select it
         AppSettings.shared.selectedModel = model
         updateSelectedModel(model)
         onModelChange(model)
@@ -147,29 +243,107 @@ class StatusBarController: NSObject {
             keyUp?.post(tap: .cghidEventTap)
         }
     }
+
+    // MARK: - Update Checker
+
+    @objc private func checkForUpdates() {
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+
+        let url = URL(string: "https://api.github.com/repos/zhengyishen0/voca-app/releases/latest")!
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    self.showUpdateAlert(title: "Update Check Failed",
+                                        message: "Could not check for updates: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let data = data,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let tagName = json["tag_name"] as? String else {
+                    self.showUpdateAlert(title: "Update Check Failed",
+                                        message: "Could not parse update information.")
+                    return
+                }
+
+                let latestVersion = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+
+                if self.isVersion(latestVersion, newerThan: currentVersion) {
+                    let alert = NSAlert()
+                    alert.messageText = "Update Available"
+                    alert.informativeText = "A new version (\(latestVersion)) is available. You are currently running version \(currentVersion)."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "Download")
+                    alert.addButton(withTitle: "Later")
+
+                    if alert.runModal() == .alertFirstButtonReturn {
+                        if let downloadURL = URL(string: "https://github.com/zhengyishen0/voca-app/releases/latest") {
+                            NSWorkspace.shared.open(downloadURL)
+                        }
+                    }
+                } else {
+                    self.showUpdateAlert(title: "You're Up to Date",
+                                        message: "Voca \(currentVersion) is the latest version.")
+                }
+            }
+        }.resume()
+    }
+
+    private func showUpdateAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func isVersion(_ version1: String, newerThan version2: String) -> Bool {
+        let v1 = version1.split(separator: ".").compactMap { Int($0) }
+        let v2 = version2.split(separator: ".").compactMap { Int($0) }
+
+        for i in 0..<max(v1.count, v2.count) {
+            let n1 = i < v1.count ? v1[i] : 0
+            let n2 = i < v2.count ? v2[i] : 0
+            if n1 > n2 { return true }
+            if n1 < n2 { return false }
+        }
+        return false
+    }
 }
 
 extension StatusBarController: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        // Update history submenu
-        historySubmenu.removeAllItems()
+        // Update model statuses
+        modelManager.checkAllModelStatus()
+        for model in ASRModel.availableModels {
+            if let status = modelManager.modelStatus[model] {
+                updateModelMenuItem(model, status: status)
+            }
+        }
 
+        // Update history items
         let history = historyManager.getAll()
-        if history.isEmpty {
-            let emptyItem = NSMenuItem(title: "(empty)", action: nil, keyEquivalent: "")
-            emptyItem.isEnabled = false
-            historySubmenu.addItem(emptyItem)
-        } else {
-            for (index, text) in history.enumerated() {
-                let preview = String(text.prefix(40)) + (text.count > 40 ? "..." : "")
-                let item = NSMenuItem(
-                    title: "\(index + 1). \(preview)",
-                    action: #selector(historyItemClicked(_:)),
-                    keyEquivalent: ""
-                )
+
+        for i in 1...3 {
+            guard let item = menu.item(withTag: 100 + i) else { continue }
+
+            if i <= history.count {
+                let text = history[i - 1]
+                let preview = String(text.prefix(35)) + (text.count > 35 ? "..." : "")
+                item.title = "  \(i). \(preview)"
+                item.action = #selector(historyItemClicked(_:))
                 item.target = self
                 item.representedObject = text
-                historySubmenu.addItem(item)
+                item.isEnabled = true
+            } else {
+                item.title = "  \(i). (empty)"
+                item.action = nil
+                item.representedObject = nil
+                item.isEnabled = false
             }
         }
     }
