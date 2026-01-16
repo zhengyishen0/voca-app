@@ -150,12 +150,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let modelTime = result.modelTime
 
         if let text = result.text, !text.isEmpty {
+            // Clean up model artifacts (emotion tags from SenseVoice)
+            let cleanedText = text
+                .replacingOccurrences(of: "<|EMO_UNKNOWN|>", with: "")
+                .replacingOccurrences(of: "<|NEUTRAL|>", with: "")
+                .replacingOccurrences(of: "<|HAPPY|>", with: "")
+                .replacingOccurrences(of: "<|SAD|>", with: "")
+                .replacingOccurrences(of: "<|ANGRY|>", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            guard !cleanedText.isEmpty else {
+                print("✗ Empty after cleanup")
+                statusBarController.setState(.idle)
+                return
+            }
+
             let modelMs = Int(modelTime * 1000)
             let totalMs = Int(totalTime * 1000)
-            print("✓ \(text)")
+            print("✓ \(cleanedText)")
             print("  ⏱ model: \(modelMs)ms | total: \(totalMs)ms")
-            historyManager.add(text)
-            pasteText(text)
+            historyManager.add(cleanedText)
+            pasteText(cleanedText)
         } else {
             print("✗ No result (model: \(Int(modelTime * 1000))ms)")
         }
