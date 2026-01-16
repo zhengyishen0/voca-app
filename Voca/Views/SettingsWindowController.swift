@@ -48,6 +48,13 @@ class SettingsView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setupUI()
+
+        // Subscribe to model download status changes
+        modelManager.onStatusChanged = { [weak self] _, _ in
+            DispatchQueue.main.async {
+                self?.refreshModels()
+            }
+        }
     }
 
     required init?(coder: NSCoder) {

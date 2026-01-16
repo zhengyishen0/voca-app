@@ -51,7 +51,10 @@ class HotkeyMonitor {
         // Check for history hotkey (Ctrl+Option+V)
         if event.type == .keyDown {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if event.keyCode == historyKeyCode && flags == historyModifiers {
+            // Check if both control and option are held, and the V key is pressed
+            if event.keyCode == historyKeyCode &&
+               flags.contains(.control) && flags.contains(.option) &&
+               !flags.contains(.command) && !flags.contains(.shift) {
                 onHistoryPaste()
                 return
             }

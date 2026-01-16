@@ -1,5 +1,6 @@
 import Cocoa
 import VoicePipeline
+import ApplicationServices
 
 private var appDelegateRef: AppDelegate?
 
@@ -60,6 +61,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Set app icon (waveform.circle.fill)
         setAppIcon()
+
+        // Check accessibility permissions (needed for auto-paste)
+        checkAccessibilityPermission()
 
         // Initialize ASR engine (loads CoreML models once at startup)
         print("Loading ASR models...")
@@ -247,6 +251,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 icon.unlockFocus()
                 NSApp.applicationIconImage = icon
             }
+        }
+    }
+
+    private func checkAccessibilityPermission() {
+        // Check if accessibility permission is granted (needed to send synthetic keyboard events)
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        let trusted = AXIsProcessTrustedWithOptions(options)
+
+        if !trusted {
+            print("⚠️ Accessibility permission required for auto-paste")
+            print("  Please enable in System Settings > Privacy & Security > Accessibility")
         }
     }
 }
