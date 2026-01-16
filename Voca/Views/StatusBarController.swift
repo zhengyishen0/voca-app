@@ -73,21 +73,11 @@ class StatusBarController: NSObject {
             menu.addItem(item)
         }
 
-        menu.addItem(NSMenuItem.separator())
-
-        // History section header with shortcut hint
-        let historyHeader = createHistoryHeader()
-        menu.addItem(historyHeader)
-
-        // History items will be populated dynamically
-        // (placeholder items that will be replaced in menuWillOpen)
-        for i in 1...3 {
-            let item = NSMenuItem(title: "  \(i). (empty)", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            item.tag = 100 + i  // Tag for identification
-            item.indentationLevel = 1
-            menu.addItem(item)
-        }
+        // History section - separator, header, and items added dynamically in menuWillOpen
+        // Tag 200 marks the position where history section starts
+        let historySeparator = NSMenuItem.separator()
+        historySeparator.tag = 200
+        menu.addItem(historySeparator)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -152,27 +142,41 @@ class StatusBarController: NSObject {
 
         switch status {
         case .notDownloaded:
-            item.title = "  \(model.shortName) ↓"
+            item.attributedTitle = createModelTitle(model.shortName, rightText: "↓")
             item.state = isSelected ? .on : .off
             item.isEnabled = true
 
         case .downloading(let progress):
             let percent = Int(progress * 100)
-            item.title = "  \(model.shortName) \(percent)%"
+            item.attributedTitle = createModelTitle(model.shortName, rightText: "\(percent)%")
             item.state = .off
             item.isEnabled = false
 
         case .downloaded:
             item.title = "  \(model.shortName)"
+            item.attributedTitle = nil
             item.state = isSelected ? .on : .off
             item.isEnabled = true
 
         case .error(let message):
-            item.title = "  \(model.shortName) ✗"
+            item.attributedTitle = createModelTitle(model.shortName, rightText: "✗")
             item.toolTip = message
             item.state = isSelected ? .on : .off
             item.isEnabled = true
         }
+    }
+
+    private func createModelTitle(_ name: String, rightText: String) -> NSAttributedString {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.tabStops = [NSTextTab(textAlignment: .right, location: 180)]
+
+        return NSAttributedString(
+            string: "  \(name)\t\(rightText)",
+            attributes: [
+                .font: NSFont.menuFont(ofSize: 0),
+                .paragraphStyle: paragraphStyle
+            ]
+        )
     }
 
     @objc private func aboutClicked() {
@@ -325,25 +329,49 @@ extension StatusBarController: NSMenuDelegate {
             }
         }
 
-        // Update history items
+        // Remove old history items (tags 201+)
+        while let item = menu.item(withTag: 201) {
+            menu.removeItem(item)
+        }
+        while let item = menu.item(withTag: 202) {
+            menu.removeItem(item)
+        }
+        while let item = menu.item(withTag: 203) {
+            menu.removeItem(item)
+        }
+        while let item = menu.item(withTag: 204) {  // Header
+            menu.removeItem(item)
+        }
+
+        // Get history
         let history = historyManager.getAll()
 
-        for i in 1...3 {
-            guard let item = menu.item(withTag: 100 + i) else { continue }
+        // Find insertion point (after separator with tag 200)
+        guard let separatorIndex = menu.items.firstIndex(where: { $0.tag == 200 }) else { return }
 
-            if i <= history.count {
-                let text = history[i - 1]
+        // Only show history section if there's history
+        if !history.isEmpty {
+            var insertIndex = separatorIndex + 1
+
+            // Add header
+            let header = createHistoryHeader()
+            header.tag = 204
+            menu.insertItem(header, at: insertIndex)
+            insertIndex += 1
+
+            // Add history items
+            for (i, text) in history.prefix(3).enumerated() {
                 let preview = String(text.prefix(35)) + (text.count > 35 ? "..." : "")
-                item.title = "  \(i). \(preview)"
-                item.action = #selector(historyItemClicked(_:))
+                let item = NSMenuItem(
+                    title: "  \(i + 1). \(preview)",
+                    action: #selector(historyItemClicked(_:)),
+                    keyEquivalent: ""
+                )
                 item.target = self
                 item.representedObject = text
-                item.isEnabled = true
-            } else {
-                item.title = "  \(i). (empty)"
-                item.action = nil
-                item.representedObject = nil
-                item.isEnabled = false
+                item.tag = 201 + i
+                menu.insertItem(item, at: insertIndex)
+                insertIndex += 1
             }
         }
     }
