@@ -172,13 +172,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let modelTime = result.modelTime
 
         if let text = result.text, !text.isEmpty {
-            // Clean up model artifacts (emotion tags from SenseVoice)
+            // Clean up model artifacts (tags like <|EMO_UNKNOWN|>, <|jp|>, <|en|>, etc.)
             let cleanedText = text
-                .replacingOccurrences(of: "<|EMO_UNKNOWN|>", with: "")
-                .replacingOccurrences(of: "<|NEUTRAL|>", with: "")
-                .replacingOccurrences(of: "<|HAPPY|>", with: "")
-                .replacingOccurrences(of: "<|SAD|>", with: "")
-                .replacingOccurrences(of: "<|ANGRY|>", with: "")
+                .replacingOccurrences(of: "<\\|[^|]+\\|>", with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespaces)
 
             guard !cleanedText.isEmpty else {
