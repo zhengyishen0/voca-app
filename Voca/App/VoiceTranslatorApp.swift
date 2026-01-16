@@ -33,7 +33,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return appSupport.appendingPathComponent("Voca/models").path
     }
     private var assetsDir: String {
-        Bundle.main.resourcePath! + "/Resources/assets"
+        // Use Bundle.module for SPM resources (works for both CLI and .app bundle)
+        Bundle.module.resourcePath! + "/assets"
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
