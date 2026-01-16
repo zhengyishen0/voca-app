@@ -62,12 +62,22 @@ jobs:
         run: |
           IDENTITY="Developer ID Application: Zhengyi Shen ($APPLE_TEAM_ID)"
 
-          # Sign the framework first (sign inside-out)
+          # Sign the framework binary directly (framework has ambiguous structure)
           codesign --force --options runtime --timestamp \
             --sign "$IDENTITY" \
-            "dist/Voca.app/Contents/Frameworks/VoicePipeline.framework"
+            "dist/Voca.app/Contents/Frameworks/VoicePipeline.framework/Versions/A/VoicePipeline"
 
-          # Sign the main app
+          # Sign the framework bundle
+          codesign --force --options runtime --timestamp \
+            --sign "$IDENTITY" \
+            "dist/Voca.app/Contents/Frameworks/VoicePipeline.framework/Versions/A"
+
+          # Sign the main executable
+          codesign --force --options runtime --timestamp \
+            --sign "$IDENTITY" \
+            "dist/Voca.app/Contents/MacOS/Voca"
+
+          # Sign the app bundle
           codesign --force --options runtime --timestamp \
             --sign "$IDENTITY" \
             "dist/Voca.app"
