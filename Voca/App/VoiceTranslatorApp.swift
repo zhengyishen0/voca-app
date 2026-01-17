@@ -109,6 +109,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startRecording() {
+        // Check if selected model is downloaded
+        let selectedModel = AppSettings.shared.selectedModel
+        if !ModelManager.shared.isModelDownloaded(selectedModel) {
+            print("⚠️ Model not downloaded, opening settings...")
+            SettingsWindowController.shared.show()
+            return
+        }
+
         print("🎤 Recording...")
         statusBarController.setState(.recording)
         recordingOverlay.show()

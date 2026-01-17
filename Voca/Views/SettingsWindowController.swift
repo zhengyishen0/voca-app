@@ -7,7 +7,7 @@ class SettingsWindowController: NSWindowController {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 200),
+            contentRect: NSRect(x: 0, y: 0, width: 450, height: 230),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -38,6 +38,7 @@ class SettingsWindowController: NSWindowController {
 // MARK: - Settings View
 
 class SettingsView: NSView {
+    private var hintLabel: NSTextField!
     private var modelPopup: NSPopUpButton!
     private var inputPopup: NSPopUpButton!
     private var shortcutPopup: NSPopUpButton!
@@ -62,6 +63,13 @@ class SettingsView: NSView {
     }
 
     private func setupUI() {
+        // Create hint label (shown when no model is downloaded)
+        hintLabel = NSTextField(labelWithString: NSLocalizedString("Please select a model to download before recording.", comment: ""))
+        hintLabel.font = NSFont.systemFont(ofSize: 12)
+        hintLabel.textColor = .secondaryLabelColor
+        hintLabel.alignment = .center
+        hintLabel.isHidden = true
+
         // Create labels and popups
         let modelLabel = createLabel(NSLocalizedString("Model", comment: ""))
         let inputLabel = createLabel(NSLocalizedString("Audio Input", comment: ""))
@@ -72,6 +80,7 @@ class SettingsView: NSView {
         shortcutPopup = createPopup()
 
         // Add to view
+        addSubview(hintLabel)
         addSubview(modelLabel)
         addSubview(modelPopup)
         addSubview(inputLabel)
@@ -80,6 +89,7 @@ class SettingsView: NSView {
         addSubview(shortcutPopup)
 
         // Layout with Auto Layout
+        hintLabel.translatesAutoresizingMaskIntoConstraints = false
         modelLabel.translatesAutoresizingMaskIntoConstraints = false
         modelPopup.translatesAutoresizingMaskIntoConstraints = false
         inputLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -88,9 +98,14 @@ class SettingsView: NSView {
         shortcutPopup.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
+            // Hint label (above model row)
+            hintLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            hintLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            hintLabel.topAnchor.constraint(equalTo: topAnchor, constant: 15),
+
             // Model row
             modelLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            modelLabel.topAnchor.constraint(equalTo: topAnchor, constant: 20),
+            modelLabel.topAnchor.constraint(equalTo: hintLabel.bottomAnchor, constant: 15),
             modelLabel.widthAnchor.constraint(equalToConstant: 100),
 
             modelPopup.leadingAnchor.constraint(equalTo: modelLabel.trailingAnchor, constant: 10),
@@ -175,6 +190,10 @@ class SettingsView: NSView {
                 modelPopup.select(modelPopup.lastItem)
             }
         }
+
+        // Show hint if selected model is not downloaded
+        let selectedStatus = modelManager.modelStatus[currentModel] ?? .notDownloaded
+        hintLabel.isHidden = (selectedStatus == .downloaded)
     }
 
     private func refreshInputDevices() {
