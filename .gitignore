@@ -1,10 +1,14 @@
 # Build artifacts
 .build/
 .swiftpm/
-*.xcodeproj
-xcuserdata/
-.vscode
+build/
 dist/
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# IDE
+.vscode/
 
 
 # Models (downloaded on-demand, large files)

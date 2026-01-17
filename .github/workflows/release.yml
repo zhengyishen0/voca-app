@@ -31,7 +31,6 @@ jobs:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          # Create temporary keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
 
@@ -39,70 +38,33 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Import certificate
           echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
           security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH"
 
-          # Clean up
           rm $RUNNER_TEMP/certificate.p12
 
-      - name: Build Release
-        run: swift build -c release
-
-      - name: Bundle App
-        run: |
-          chmod +x scripts/bundle-app.sh
-          ./scripts/bundle-app.sh "$VERSION" "$BUILD_NUMBER"
-
-      - name: Code Sign App
+      - name: Build and Archive
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          IDENTITY="Developer ID Application: Zhengyi Shen ($APPLE_TEAM_ID)"
+          # Update version in Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" VocaApp/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" VocaApp/Info.plist
 
-          # Sign ONNX Runtime library first
-          if [ -f "dist/Voca.app/Contents/Frameworks/libonnxruntime.1.17.0.dylib" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$IDENTITY" \
-              "dist/Voca.app/Contents/Frameworks/libonnxruntime.1.17.0.dylib"
-            echo "Signed libonnxruntime.1.17.0.dylib"
-          fi
-
-          # Sign SPM resource bundle (in Resources)
-          if [ -d "dist/Voca.app/Contents/Resources/Voca_Voca.bundle" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$IDENTITY" \
-              "dist/Voca.app/Contents/Resources/Voca_Voca.bundle"
-            echo "Signed Voca_Voca.bundle"
-          fi
-
-          # Sign the framework binary directly (framework has ambiguous structure)
-          codesign --force --options runtime --timestamp \
-            --sign "$IDENTITY" \
-            "dist/Voca.app/Contents/Frameworks/VoicePipeline.framework/Versions/A/VoicePipeline"
-
-          # Sign the framework bundle
-          codesign --force --options runtime --timestamp \
-            --sign "$IDENTITY" \
-            "dist/Voca.app/Contents/Frameworks/VoicePipeline.framework/Versions/A"
-
-          # Sign the main executable with entitlements
-          codesign --force --options runtime --timestamp \
-            --entitlements Voca.entitlements \
-            --sign "$IDENTITY" \
-            "dist/Voca.app/Contents/MacOS/Voca"
-
-          # Sign the app bundle with entitlements
-          codesign --force --options runtime --timestamp \
-            --entitlements Voca.entitlements \
-            --sign "$IDENTITY" \
-            "dist/Voca.app"
+          xcodebuild clean archive \
+            -project VocaApp.xcodeproj \
+            -scheme Voca \
+            -configuration Release \
+            -archivePath build/Voca.xcarchive \
+            CODE_SIGN_IDENTITY="Developer ID Application: Zhengyi Shen ($APPLE_TEAM_ID)" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=$APPLE_TEAM_ID
 
           # Verify signature
-          codesign --verify --deep --strict "dist/Voca.app"
-          echo "Code signing completed successfully"
+          codesign --verify --deep --strict build/Voca.xcarchive/Products/Applications/Voca.app
+          echo "Build and signing completed successfully"
 
       - name: Notarize App
         env:
@@ -110,20 +72,16 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # Create zip for notarization
-          ditto -c -k --keepParent "dist/Voca.app" "Voca-notarize.zip"
+          ditto -c -k --keepParent "build/Voca.xcarchive/Products/Applications/Voca.app" "Voca-notarize.zip"
 
-          # Submit for notarization and wait
           xcrun notarytool submit "Voca-notarize.zip" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_PASSWORD" \
             --wait
 
-          # Staple the notarization ticket
-          xcrun stapler staple "dist/Voca.app"
+          xcrun stapler staple "build/Voca.xcarchive/Products/Applications/Voca.app"
 
-          # Clean up
           rm "Voca-notarize.zip"
           echo "Notarization completed successfully"
 
@@ -140,7 +98,7 @@ jobs:
             --icon "Voca.app" 150 185 \
             --app-drop-link 450 185 \
             "Voca-${{ env.VERSION }}.dmg" \
-            "dist/Voca.app"
+            "build/Voca.xcarchive/Products/Applications/Voca.app"
 
       - name: Calculate DMG SHA256
         run: |

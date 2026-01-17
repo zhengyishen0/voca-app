@@ -4,9 +4,8 @@ import ApplicationServices
 
 private var appDelegateRef: AppDelegate?
 
-@main
-struct VocaApp {
-    static func main() {
+public enum VocaApp {
+    public static func main() {
         let app = NSApplication.shared
         let delegate = AppDelegate()
         appDelegateRef = delegate

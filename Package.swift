@@ -4,24 +4,19 @@ import PackageDescription
 let package = Package(
     name: "Voca",
     platforms: [.macOS(.v13)],
+    products: [
+        .library(name: "VocaLib", targets: ["VocaLib"])
+    ],
     targets: [
-        .executableTarget(
-            name: "Voca",
+        .binaryTarget(
+            name: "VoicePipeline",
+            path: "Frameworks/VoicePipeline.xcframework"
+        ),
+        .target(
+            name: "VocaLib",
+            dependencies: ["VoicePipeline"],
             path: "Voca",
-            resources: [.copy("Resources")],
-            swiftSettings: [
-                .unsafeFlags([
-                    "-F", "Frameworks"
-                ])
-            ],
-            linkerSettings: [
-                .unsafeFlags([
-                    "-F", "Frameworks",
-                    "-framework", "VoicePipeline",
-                    "-Xlinker", "-rpath",
-                    "-Xlinker", "@executable_path/../Frameworks"
-                ])
-            ]
+            resources: [.copy("Resources")]
         )
     ]
 )

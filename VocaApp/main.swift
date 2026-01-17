@@ -1,0 +1,3 @@
+import VocaLib
+
+VocaApp.main()
