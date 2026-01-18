@@ -132,7 +132,7 @@ class Transcriber {
             }
         }
 
-        print("📊 Split audio into \(chunks.count) chunks")
+        print("Split audio into \(chunks.count) chunks")
         return chunks
     }
 
