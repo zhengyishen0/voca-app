@@ -49,10 +49,6 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # Update version in Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" VocaApp/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" VocaApp/Info.plist
-
           xcodebuild clean archive \
             -project VocaApp.xcodeproj \
             -scheme Voca \
@@ -62,7 +58,9 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_IDENTITY="Developer ID Application: Zhengyi Shen ($APPLE_TEAM_ID)" \
             CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM=$APPLE_TEAM_ID
+            DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
+            MARKETING_VERSION=$VERSION \
+            CURRENT_PROJECT_VERSION=$BUILD_NUMBER
 
           # Verify signature
           codesign --verify --deep --strict build/Voca.xcarchive/Products/Applications/Voca.app
