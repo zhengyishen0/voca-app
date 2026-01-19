@@ -20,7 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyMonitor: HotkeyMonitor!
     private var audioRecorder: AudioRecorder!
     private var transcriber: Transcriber!
-    private var historyManager: HistoryManager!
+    private var historyManager: HistoryManager { HistoryManager.shared }
     private var recordingOverlay: RecordingOverlay!
     private var asrEngine: ASREngine!
 
@@ -76,7 +76,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("WARNING: ASR engine failed to initialize")
         }
 
-        historyManager = HistoryManager()
         transcriber = Transcriber(engine: asrEngine)
         audioRecorder = AudioRecorder()
         recordingOverlay = RecordingOverlay()
@@ -96,8 +95,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusBarController = StatusBarController(
             onModelChange: { [weak self] model in
                 self?.transcriber.setModel(model)
-            },
-            historyManager: historyManager
+            }
         )
 
         let settings = AppSettings.shared

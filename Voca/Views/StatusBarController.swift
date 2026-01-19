@@ -12,12 +12,10 @@ class StatusBarController: NSObject {
     private var hintItem: NSMenuItem!
 
     private let onModelChange: (ASRModel) -> Void
-    private let historyManager: HistoryManager
+    private var historyManager: HistoryManager { HistoryManager.shared }
 
-    init(onModelChange: @escaping (ASRModel) -> Void,
-         historyManager: HistoryManager) {
+    init(onModelChange: @escaping (ASRModel) -> Void) {
         self.onModelChange = onModelChange
-        self.historyManager = historyManager
 
         super.init()
 
@@ -298,13 +296,8 @@ extension StatusBarController: NSMenuDelegate {
         // Update hint text in case shortcut changed
         updateHintText()
 
-        // Remove old history items (tags 201+ and play buttons 301+)
+        // Remove old history items (tags 201+)
         for tag in 201...210 {
-            while let item = menu.item(withTag: tag) {
-                menu.removeItem(item)
-            }
-        }
-        for tag in 301...310 {
             while let item = menu.item(withTag: tag) {
                 menu.removeItem(item)
             }
@@ -327,45 +320,21 @@ extension StatusBarController: NSMenuDelegate {
         menu.insertItem(header, at: insertIndex)
         insertIndex += 1
 
-        // Add history items with play buttons if any
+        // Add history items - simple click to paste
         for (i, historyItem) in historyItems.prefix(5).enumerated() {
-            // Create submenu for each history item
-            let preview = truncateToWidth(historyItem.text, maxWidth: 180)
-            let hasAudio = historyItem.audioURL != nil
+            let preview = truncateToWidth(historyItem.text, maxWidth: 200)
 
-            // Main item - click to paste
             let item = NSMenuItem(
-                title: hasAudio ? "  \(preview)" : "  \(preview)",
+                title: "  \(preview)",
                 action: #selector(historyItemClicked(_:)),
                 keyEquivalent: ""
             )
             item.target = self
-            item.representedObject = ["text": historyItem.text, "index": i]
+            item.representedObject = historyItem.text
             item.tag = 201 + i
-
-            // Add play button as submenu if audio exists
-            if hasAudio {
-                let submenu = NSMenu()
-                let pasteItem = NSMenuItem(title: "Paste", action: #selector(historyItemClicked(_:)), keyEquivalent: "")
-                pasteItem.target = self
-                pasteItem.representedObject = ["text": historyItem.text, "index": i]
-
-                let playItem = NSMenuItem(title: "Play Recording", action: #selector(playHistoryAudio(_:)), keyEquivalent: "")
-                playItem.target = self
-                playItem.representedObject = i
-
-                submenu.addItem(pasteItem)
-                submenu.addItem(playItem)
-                item.submenu = submenu
-            }
 
             menu.insertItem(item, at: insertIndex)
             insertIndex += 1
         }
-    }
-
-    @objc private func playHistoryAudio(_ sender: NSMenuItem) {
-        guard let index = sender.representedObject as? Int else { return }
-        historyManager.playAudio(at: index)
     }
 }

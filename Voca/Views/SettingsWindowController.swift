@@ -9,7 +9,7 @@ class SettingsWindowController: NSWindowController {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 180),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 280),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -46,13 +46,15 @@ class SettingsView: NSView {
     private var shortcutPopup: NSPopUpButton!
     private var micStatusLabel: NSTextField!
     private var micStatusIcon: NSImageView!
-    private var micButton: NSButton!
     private var accessibilityStatusLabel: NSTextField!
     private var accessibilityStatusIcon: NSImageView!
-    private var accessibilityButton: NSButton!
+    private var historyScrollView: NSScrollView!
+    private var historyStackView: NSStackView!
+    private var historyContainer: FlippedView!
 
     private let modelManager = ModelManager.shared
     private let audioInputManager = AudioInputManager.shared
+    private let historyManager = HistoryManager.shared
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -72,6 +74,18 @@ class SettingsView: NSView {
             name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
+
+        // Refresh history when new transcription is added
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(historyDidUpdate),
+            name: .historyDidUpdate,
+            object: nil
+        )
+    }
+
+    @objc private func historyDidUpdate() {
+        refreshHistory()
     }
 
     @objc private func appDidBecomeActive() {
@@ -101,26 +115,38 @@ class SettingsView: NSView {
 
         // Permission indicators (bottom right)
         micStatusLabel = NSTextField(labelWithString: "")
-        micStatusLabel.font = NSFont.systemFont(ofSize: 13)
-        micStatusLabel.textColor = .labelColor
+        micStatusLabel.font = NSFont.systemFont(ofSize: 12)
 
         micStatusIcon = NSImageView()
         micStatusIcon.imageScaling = .scaleProportionallyDown
 
-        micButton = NSButton(title: NSLocalizedString("Grant", comment: ""), target: self, action: #selector(openMicrophoneSettings))
-        micButton.bezelStyle = .inline
-        micButton.font = NSFont.systemFont(ofSize: 11)
-
         accessibilityStatusLabel = NSTextField(labelWithString: "")
-        accessibilityStatusLabel.font = NSFont.systemFont(ofSize: 13)
-        accessibilityStatusLabel.textColor = .labelColor
+        accessibilityStatusLabel.font = NSFont.systemFont(ofSize: 12)
 
         accessibilityStatusIcon = NSImageView()
         accessibilityStatusIcon.imageScaling = .scaleProportionallyDown
 
-        accessibilityButton = NSButton(title: NSLocalizedString("Grant", comment: ""), target: self, action: #selector(openAccessibilitySettings))
-        accessibilityButton.bezelStyle = .inline
-        accessibilityButton.font = NSFont.systemFont(ofSize: 11)
+        // History section
+        let historyLabel = NSTextField(labelWithString: NSLocalizedString("History", comment: ""))
+        historyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+
+        historyStackView = NSStackView()
+        historyStackView.orientation = .vertical
+        historyStackView.alignment = .leading
+        historyStackView.spacing = 1
+        historyStackView.setHuggingPriority(.defaultHigh, for: .vertical)
+
+        // Use a flipped container so content starts from top
+        historyContainer = FlippedView()
+        historyContainer.translatesAutoresizingMaskIntoConstraints = false
+        historyContainer.addSubview(historyStackView)
+
+        historyScrollView = NSScrollView()
+        historyScrollView.documentView = historyContainer
+        historyScrollView.hasVerticalScroller = true
+        historyScrollView.hasHorizontalScroller = false
+        historyScrollView.autohidesScrollers = true
+        historyScrollView.borderType = .bezelBorder
 
         // Add to view
         addSubview(hintLabel)
@@ -132,10 +158,10 @@ class SettingsView: NSView {
         addSubview(shortcutPopup)
         addSubview(micStatusLabel)
         addSubview(micStatusIcon)
-        addSubview(micButton)
         addSubview(accessibilityStatusLabel)
         addSubview(accessibilityStatusIcon)
-        addSubview(accessibilityButton)
+        addSubview(historyLabel)
+        addSubview(historyScrollView)
 
         // Layout with Auto Layout
         hintLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -147,10 +173,11 @@ class SettingsView: NSView {
         shortcutPopup.translatesAutoresizingMaskIntoConstraints = false
         micStatusLabel.translatesAutoresizingMaskIntoConstraints = false
         micStatusIcon.translatesAutoresizingMaskIntoConstraints = false
-        micButton.translatesAutoresizingMaskIntoConstraints = false
         accessibilityStatusLabel.translatesAutoresizingMaskIntoConstraints = false
         accessibilityStatusIcon.translatesAutoresizingMaskIntoConstraints = false
-        accessibilityButton.translatesAutoresizingMaskIntoConstraints = false
+        historyLabel.translatesAutoresizingMaskIntoConstraints = false
+        historyScrollView.translatesAutoresizingMaskIntoConstraints = false
+        historyStackView.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
             // Hint label (above model row)
@@ -185,32 +212,37 @@ class SettingsView: NSView {
             shortcutPopup.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
             shortcutPopup.centerYAnchor.constraint(equalTo: shortcutLabel.centerYAnchor),
 
-            // Permission indicators (right-aligned with dropdown edge)
-            // Layout: [Mic Label] [Icon/Button] [Access Label] [Icon/Button]
+            // History section (after shortcut row)
+            historyLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            historyLabel.topAnchor.constraint(equalTo: shortcutLabel.bottomAnchor, constant: 16),
 
-            // Accessibility: [Label] [Icon] [Button] - aligned with dropdown trailing edge
-            accessibilityButton.trailingAnchor.constraint(equalTo: shortcutPopup.trailingAnchor),
-            accessibilityButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
+            historyScrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            historyScrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            historyScrollView.topAnchor.constraint(equalTo: historyLabel.bottomAnchor, constant: 8),
+            historyScrollView.bottomAnchor.constraint(equalTo: micStatusLabel.topAnchor, constant: -12),
 
-            accessibilityStatusIcon.trailingAnchor.constraint(equalTo: shortcutPopup.trailingAnchor),
-            accessibilityStatusIcon.centerYAnchor.constraint(equalTo: accessibilityButton.centerYAnchor),
+            // Stack view in flipped container (top-aligned)
+            historyStackView.leadingAnchor.constraint(equalTo: historyContainer.leadingAnchor),
+            historyStackView.trailingAnchor.constraint(equalTo: historyContainer.trailingAnchor),
+            historyStackView.topAnchor.constraint(equalTo: historyContainer.topAnchor),
+            historyStackView.bottomAnchor.constraint(lessThanOrEqualTo: historyContainer.bottomAnchor),
+
+            // Permission indicators (bottom right)
+            accessibilityStatusIcon.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            accessibilityStatusIcon.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
             accessibilityStatusIcon.widthAnchor.constraint(equalToConstant: 16),
             accessibilityStatusIcon.heightAnchor.constraint(equalToConstant: 16),
 
             accessibilityStatusLabel.trailingAnchor.constraint(equalTo: accessibilityStatusIcon.leadingAnchor, constant: -4),
-            accessibilityStatusLabel.centerYAnchor.constraint(equalTo: accessibilityButton.centerYAnchor),
+            accessibilityStatusLabel.centerYAnchor.constraint(equalTo: accessibilityStatusIcon.centerYAnchor),
 
-            // Microphone: [Label] [Icon] [Button] - reduced spacing (8pt instead of 16pt)
-            micButton.trailingAnchor.constraint(equalTo: accessibilityStatusLabel.leadingAnchor, constant: -12),
-            micButton.centerYAnchor.constraint(equalTo: accessibilityButton.centerYAnchor),
-
-            micStatusIcon.trailingAnchor.constraint(equalTo: accessibilityStatusLabel.leadingAnchor, constant: -12),
-            micStatusIcon.centerYAnchor.constraint(equalTo: accessibilityButton.centerYAnchor),
+            micStatusIcon.trailingAnchor.constraint(equalTo: accessibilityStatusLabel.leadingAnchor, constant: -16),
+            micStatusIcon.centerYAnchor.constraint(equalTo: accessibilityStatusIcon.centerYAnchor),
             micStatusIcon.widthAnchor.constraint(equalToConstant: 16),
             micStatusIcon.heightAnchor.constraint(equalToConstant: 16),
 
             micStatusLabel.trailingAnchor.constraint(equalTo: micStatusIcon.leadingAnchor, constant: -4),
-            micStatusLabel.centerYAnchor.constraint(equalTo: accessibilityButton.centerYAnchor),
+            micStatusLabel.centerYAnchor.constraint(equalTo: accessibilityStatusIcon.centerYAnchor),
         ])
 
         // Set actions
@@ -242,6 +274,7 @@ class SettingsView: NSView {
         refreshInputDevices()
         refreshShortcuts()
         refreshPermissions()
+        refreshHistory()
     }
 
     // MARK: - Language/Models
@@ -303,7 +336,7 @@ class SettingsView: NSView {
             inputPopup.lastItem?.representedObject = device.uid
         }
 
-        // Select saved device or default to first item (System Default)
+        // Select saved device, or default to built-in mic if no preference
         var selected = false
         if !currentUID.isEmpty {
             for i in 0..<inputPopup.numberOfItems {
@@ -315,7 +348,21 @@ class SettingsView: NSView {
             }
         }
         if !selected {
-            inputPopup.selectItem(at: 0)
+            // Default to built-in microphone
+            if let builtIn = audioInputManager.getBuiltInMicrophone() {
+                for i in 0..<inputPopup.numberOfItems {
+                    if let uid = inputPopup.item(at: i)?.representedObject as? String, uid == builtIn.uid {
+                        inputPopup.selectItem(at: i)
+                        AppSettings.shared.inputDeviceUID = builtIn.uid
+                        selected = true
+                        break
+                    }
+                }
+            }
+            // Fall back to System Default if no built-in found
+            if !selected {
+                inputPopup.selectItem(at: 0)
+            }
         }
     }
 
@@ -370,32 +417,25 @@ class SettingsView: NSView {
         // Microphone permission
         let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         micStatusLabel.stringValue = NSLocalizedString("Microphone", comment: "")
-        micStatusLabel.textColor = .labelColor
 
-        switch micStatus {
-        case .authorized:
+        if micStatus == .authorized {
             micStatusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Granted")
             micStatusIcon.contentTintColor = .systemGreen
-            micStatusIcon.isHidden = false
-            micButton.isHidden = true
-        default:
-            micStatusIcon.isHidden = true
-            micButton.isHidden = false
+        } else {
+            micStatusIcon.image = NSImage(systemSymbolName: "questionmark.circle.fill", accessibilityDescription: "Not Granted")
+            micStatusIcon.contentTintColor = .systemYellow
         }
 
         // Accessibility permission
         accessibilityStatusLabel.stringValue = NSLocalizedString("Accessibility", comment: "")
-        accessibilityStatusLabel.textColor = .labelColor
 
         let accessibilityGranted = AXIsProcessTrusted()
         if accessibilityGranted {
             accessibilityStatusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Granted")
             accessibilityStatusIcon.contentTintColor = .systemGreen
-            accessibilityStatusIcon.isHidden = false
-            accessibilityButton.isHidden = true
         } else {
-            accessibilityStatusIcon.isHidden = true
-            accessibilityButton.isHidden = false
+            accessibilityStatusIcon.image = NSImage(systemSymbolName: "questionmark.circle.fill", accessibilityDescription: "Not Granted")
+            accessibilityStatusIcon.contentTintColor = .systemYellow
         }
     }
 
@@ -421,9 +461,111 @@ class SettingsView: NSView {
             NSWorkspace.shared.open(url)
         }
     }
+
+    // MARK: - History
+
+    private func refreshHistory() {
+        // Clear existing items
+        historyStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        let items = historyManager.getAllItems()
+
+        if items.isEmpty {
+            let emptyLabel = NSTextField(labelWithString: NSLocalizedString("No transcriptions yet", comment: ""))
+            emptyLabel.font = NSFont.systemFont(ofSize: 12)
+            emptyLabel.textColor = .secondaryLabelColor
+            historyStackView.addArrangedSubview(emptyLabel)
+            return
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .short
+
+        for (index, item) in items.enumerated() {
+            let rowView = createHistoryRow(item: item, index: index, dateFormatter: dateFormatter)
+            historyStackView.addArrangedSubview(rowView)
+        }
+    }
+
+    private func createHistoryRow(item: HistoryItem, index: Int, dateFormatter: DateFormatter) -> NSView {
+        let rowView = NSView()
+        rowView.translatesAutoresizingMaskIntoConstraints = false
+
+        // Time label
+        let timeLabel = NSTextField(labelWithString: dateFormatter.string(from: item.timestamp))
+        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        timeLabel.textColor = .secondaryLabelColor
+        timeLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        // Text label (truncated)
+        let text = item.text.replacingOccurrences(of: "\n", with: " ")
+        let truncated = text.count > 60 ? String(text.prefix(60)) + "..." : text
+        let textLabel = NSTextField(labelWithString: truncated)
+        textLabel.font = NSFont.systemFont(ofSize: 12)
+        textLabel.textColor = .labelColor
+        textLabel.lineBreakMode = .byTruncatingTail
+        textLabel.translatesAutoresizingMaskIntoConstraints = false
+        textLabel.toolTip = item.text  // Full text on hover
+
+        rowView.addSubview(timeLabel)
+        rowView.addSubview(textLabel)
+
+        // Play button if audio exists
+        if item.audioURL != nil {
+            let playButton = NSButton(image: NSImage(systemSymbolName: "play.circle", accessibilityDescription: "Play")!, target: self, action: #selector(playHistoryItem(_:)))
+            playButton.bezelStyle = .inline
+            playButton.isBordered = false
+            playButton.tag = index
+            playButton.translatesAutoresizingMaskIntoConstraints = false
+            rowView.addSubview(playButton)
+
+            NSLayoutConstraint.activate([
+                timeLabel.leadingAnchor.constraint(equalTo: rowView.leadingAnchor),
+                timeLabel.centerYAnchor.constraint(equalTo: rowView.centerYAnchor),
+                timeLabel.widthAnchor.constraint(equalToConstant: 120),
+
+                textLabel.leadingAnchor.constraint(equalTo: timeLabel.trailingAnchor, constant: 8),
+                textLabel.centerYAnchor.constraint(equalTo: rowView.centerYAnchor),
+                textLabel.trailingAnchor.constraint(equalTo: playButton.leadingAnchor, constant: -8),
+
+                playButton.trailingAnchor.constraint(equalTo: rowView.trailingAnchor),
+                playButton.centerYAnchor.constraint(equalTo: rowView.centerYAnchor),
+                playButton.widthAnchor.constraint(equalToConstant: 24),
+
+                rowView.heightAnchor.constraint(equalToConstant: 20),
+                rowView.widthAnchor.constraint(equalToConstant: 440),
+            ])
+        } else {
+            NSLayoutConstraint.activate([
+                timeLabel.leadingAnchor.constraint(equalTo: rowView.leadingAnchor),
+                timeLabel.centerYAnchor.constraint(equalTo: rowView.centerYAnchor),
+                timeLabel.widthAnchor.constraint(equalToConstant: 120),
+
+                textLabel.leadingAnchor.constraint(equalTo: timeLabel.trailingAnchor, constant: 8),
+                textLabel.centerYAnchor.constraint(equalTo: rowView.centerYAnchor),
+                textLabel.trailingAnchor.constraint(equalTo: rowView.trailingAnchor),
+
+                rowView.heightAnchor.constraint(equalToConstant: 20),
+                rowView.widthAnchor.constraint(equalToConstant: 440),
+            ])
+        }
+
+        return rowView
+    }
+
+    @objc private func playHistoryItem(_ sender: NSButton) {
+        historyManager.playAudio(at: sender.tag)
+    }
+}
+
+// Flipped view for top-aligned scroll content
+class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
 
 // Notification for model change
 extension Notification.Name {
     static let modelChanged = Notification.Name("modelChanged")
+    static let historyDidUpdate = Notification.Name("historyDidUpdate")
 }

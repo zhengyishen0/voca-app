@@ -199,4 +199,33 @@ class AudioInputManager {
     func findDevice(byUID uid: String) -> AudioInputDevice? {
         return getInputDevices().first { $0.uid == uid }
     }
+
+    /// Get the built-in microphone (if available)
+    func getBuiltInMicrophone() -> AudioInputDevice? {
+        return getInputDevices().first { isBuiltInDevice($0.id) }
+    }
+
+    /// Check if a device is built-in
+    private func isBuiltInDevice(_ deviceID: AudioDeviceID) -> Bool {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var transportType: UInt32 = 0
+        var dataSize = UInt32(MemoryLayout<UInt32>.size)
+
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &propertyAddress,
+            0,
+            nil,
+            &dataSize,
+            &transportType
+        )
+
+        // kAudioDeviceTransportTypeBuiltIn = 0x626C746E ('bltn')
+        return status == noErr && transportType == kAudioDeviceTransportTypeBuiltIn
+    }
 }

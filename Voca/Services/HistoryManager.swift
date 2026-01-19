@@ -8,9 +8,11 @@ struct HistoryItem {
 }
 
 class HistoryManager {
+    static let shared = HistoryManager()
+
     private var history: [HistoryItem] = []
     private var currentIndex: Int = -1
-    private let maxItems = 10  // Increased for debugging
+    private let maxItems = 10
     private var audioPlayer: AVAudioPlayer?
 
     // Directory for storing audio recordings
@@ -50,6 +52,11 @@ class HistoryManager {
         }
         // Reset index for cycling
         currentIndex = -1
+
+        // Notify observers
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .historyDidUpdate, object: nil)
+        }
     }
 
     func getNext() -> String? {
