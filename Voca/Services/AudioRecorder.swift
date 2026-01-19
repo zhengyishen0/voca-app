@@ -14,8 +14,28 @@ class AudioRecorder {
     // Audio level callback for visualization
     var onAudioLevel: ((Float) -> Void)?
 
+    // Speech segment callback for incremental transcription
+    var onSpeechSegment: (([Float]) -> Void)?
+
+    // Silence detection parameters
+    private let silenceThreshold: Float = 0.01  // RMS threshold for silence
+    private let silenceDuration: Double = 0.5   // Seconds of silence to trigger segment end
+    private let minSpeechDuration: Double = 0.5 // Minimum speech duration to process
+
+    // Speech segment tracking
+    private var sampleBuffer: [Float] = []
+    private var silenceStartTime: Date?
+    private var speechStartTime: Date?
+    private var isSpeaking = false
+
     func startRecording() {
         guard !isRecording else { return }
+
+        // Reset state
+        sampleBuffer = []
+        silenceStartTime = nil
+        speechStartTime = nil
+        isSpeaking = false
 
         do {
             let engine = AVAudioEngine()
@@ -76,6 +96,14 @@ class AudioRecorder {
         audioFile = nil
         isRecording = false
 
+        // Process any remaining speech in buffer (call synchronously so it runs before completion)
+        if !sampleBuffer.isEmpty && sampleBuffer.count > Int(sampleRate * minSpeechDuration) {
+            let segment = sampleBuffer
+            sampleBuffer = []
+            print("📝 Flushing final segment: \(segment.count) samples")
+            onSpeechSegment?(segment)
+        }
+
         print("Recording stopped")
         completion(tempURL)
     }
@@ -84,6 +112,7 @@ class AudioRecorder {
                                      converter: AVAudioConverter,
                                      outputFormat: AVAudioFormat) {
         // Calculate audio level from input buffer for visualization
+        var rms: Float = 0
         if let channelData = buffer.floatChannelData?[0] {
             let frameLength = Int(buffer.frameLength)
             var sum: Float = 0
@@ -91,7 +120,7 @@ class AudioRecorder {
                 let sample = channelData[i]
                 sum += sample * sample
             }
-            let rms = sqrt(sum / Float(frameLength))
+            rms = sqrt(sum / Float(frameLength))
             // Convert to 0-1 range with some amplification for better visualization
             let level = min(1.0, rms * 5.0)
             DispatchQueue.main.async { [weak self] in
@@ -124,6 +153,69 @@ class AudioRecorder {
             try audioFile?.write(from: outputBuffer)
         } catch {
             print("Failed to write audio: \(error)")
+        }
+
+        // Accumulate samples for speech detection
+        if let channelData = outputBuffer.floatChannelData?[0] {
+            let frameLength = Int(outputBuffer.frameLength)
+            for i in 0..<frameLength {
+                sampleBuffer.append(channelData[i])
+            }
+        }
+
+        // Speech/silence detection
+        detectSpeechSegment(rms: rms)
+    }
+
+    private func detectSpeechSegment(rms: Float) {
+        let now = Date()
+
+        if rms > silenceThreshold {
+            // Sound detected
+            silenceStartTime = nil
+
+            if !isSpeaking {
+                // Speech started
+                isSpeaking = true
+                speechStartTime = now
+                print("🎤 Speech started")
+            }
+        } else {
+            // Silence detected
+            if isSpeaking {
+                if silenceStartTime == nil {
+                    silenceStartTime = now
+                } else if let silenceStart = silenceStartTime,
+                          now.timeIntervalSince(silenceStart) >= silenceDuration {
+                    // Silence duration exceeded - segment complete
+
+                    // Check minimum speech duration
+                    if let speechStart = speechStartTime,
+                       now.timeIntervalSince(speechStart) >= minSpeechDuration + silenceDuration {
+
+                        // Remove trailing silence from buffer (approximate)
+                        let silenceSamples = Int(silenceDuration * sampleRate)
+                        let segmentEnd = max(0, sampleBuffer.count - silenceSamples)
+
+                        if segmentEnd > Int(sampleRate * minSpeechDuration) {
+                            let segment = Array(sampleBuffer[0..<segmentEnd])
+                            print("📝 Speech segment: \(segment.count) samples (\(Double(segment.count) / sampleRate)s)")
+
+                            // Keep some overlap for context, but start fresh for next segment
+                            sampleBuffer = Array(sampleBuffer[segmentEnd...])
+
+                            DispatchQueue.main.async { [weak self] in
+                                self?.onSpeechSegment?(segment)
+                            }
+                        }
+                    }
+
+                    // Reset for next segment
+                    isSpeaking = false
+                    speechStartTime = nil
+                    silenceStartTime = nil
+                }
+            }
         }
     }
 }

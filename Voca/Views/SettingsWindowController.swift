@@ -45,9 +45,9 @@ class SettingsView: NSView {
     private var inputPopup: NSPopUpButton!
     private var shortcutPopup: NSPopUpButton!
     private var micStatusLabel: NSTextField!
-    private var micStatusIcon: NSImageView!
+    private var micStatusIcon: NSButton!
     private var accessibilityStatusLabel: NSTextField!
-    private var accessibilityStatusIcon: NSImageView!
+    private var accessibilityStatusIcon: NSButton!
     private var historyScrollView: NSScrollView!
     private var historyStackView: NSStackView!
     private var historyContainer: FlippedView!
@@ -117,14 +117,22 @@ class SettingsView: NSView {
         micStatusLabel = NSTextField(labelWithString: "")
         micStatusLabel.font = NSFont.systemFont(ofSize: 12)
 
-        micStatusIcon = NSImageView()
+        micStatusIcon = NSButton()
+        micStatusIcon.bezelStyle = .inline
+        micStatusIcon.isBordered = false
         micStatusIcon.imageScaling = .scaleProportionallyDown
+        micStatusIcon.target = self
+        micStatusIcon.action = #selector(openMicrophoneSettings)
 
         accessibilityStatusLabel = NSTextField(labelWithString: "")
         accessibilityStatusLabel.font = NSFont.systemFont(ofSize: 12)
 
-        accessibilityStatusIcon = NSImageView()
+        accessibilityStatusIcon = NSButton()
+        accessibilityStatusIcon.bezelStyle = .inline
+        accessibilityStatusIcon.isBordered = false
         accessibilityStatusIcon.imageScaling = .scaleProportionallyDown
+        accessibilityStatusIcon.target = self
+        accessibilityStatusIcon.action = #selector(openAccessibilitySettings)
 
         // History section
         let historyLabel = NSTextField(labelWithString: NSLocalizedString("History", comment: ""))

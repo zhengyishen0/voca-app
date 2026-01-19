@@ -213,6 +213,18 @@ class Transcriber {
         }
     }
 
+    /// Transcribe a Float array of audio samples (16kHz mono) - for incremental transcription
+    func transcribeSamples(_ samples: [Float], completion: @escaping (String?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                completion(nil)
+                return
+            }
+            let text = self.transcribeChunk(samples)
+            completion(text)
+        }
+    }
+
     // Legacy methods for compatibility (no-op since model is fixed in ASREngine)
     func setModel(_ model: ASRModel) {
         // Model selection handled by ASREngine internally

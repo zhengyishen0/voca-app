@@ -31,6 +31,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let transcriptionTimeoutSeconds: TimeInterval = 30
     private var currentAudioURL: URL?  // Track audio URL for history
 
+    // Incremental transcription state
+    private var incrementalText: [String] = []  // Accumulated text from speech segments
+    private var isIncrementalMode = false
+    private var pendingSegments = 0  // Track in-flight transcriptions
+
     // Model paths - CoreML models downloaded to Application Support, assets bundled
     private var modelDir: String {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -141,6 +146,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let selectedUID = AppSettings.shared.inputDeviceUID
         if !selectedUID.isEmpty {
             if let deviceID = AudioInputManager.shared.getDeviceID(forUID: selectedUID) {
+                // Save current default so we can restore it after recording
+                AudioInputManager.shared.saveCurrentDefault()
                 AudioInputManager.shared.setDefaultInputDevice(deviceID)
             } else {
                 print("⚠️ Selected device not found, using system default")
@@ -151,31 +158,115 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusBarController.setState(.recording)
         recordingOverlay.show()
 
+        // Reset incremental transcription state
+        incrementalText = []
+        isIncrementalMode = true
+        pendingSegments = 0
+
         // Connect audio level to waveform visualization
         audioRecorder.onAudioLevel = { [weak self] level in
             self?.recordingOverlay.updateLevel(level)
         }
 
+        // Connect speech segment callback for incremental transcription
+        audioRecorder.onSpeechSegment = { [weak self] samples in
+            self?.handleSpeechSegment(samples)
+        }
+
         audioRecorder.startRecording()
+    }
+
+    private func handleSpeechSegment(_ samples: [Float]) {
+        guard isIncrementalMode else { return }
+
+        pendingSegments += 1
+        print("📝 Transcribing segment (\(samples.count) samples)...")
+
+        transcriber.transcribeSamples(samples) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+
+                self.pendingSegments -= 1
+
+                if let text = result, !text.isEmpty {
+                    // Clean up model artifacts
+                    let cleanedText = text
+                        .replacingOccurrences(of: "<\\|[^|]+\\|>", with: "", options: .regularExpression)
+                        .trimmingCharacters(in: .whitespaces)
+
+                    if !cleanedText.isEmpty {
+                        self.incrementalText.append(cleanedText)
+                        print("✓ Incremental: \(cleanedText)")
+                        // Always paste the transcribed segment (including final segment after recording stops)
+                        self.pasteText(cleanedText + " ")
+                    }
+                }
+            }
+        }
     }
 
     private func stopRecordingAndTranscribe() {
         totalStartTime = Date()  // Start total timing when CMD released
         audioRecorder.onAudioLevel = nil
+        // Keep onSpeechSegment active - stopRecording will flush remaining audio
 
         // Switch overlay to processing mode instead of hiding
         recordingOverlay.showProcessing()
 
         audioRecorder.stopRecording { [weak self] audioURL in
-            guard let self = self, let url = audioURL else {
+            guard let self = self else { return }
+
+            // Now clear the callback after stopRecording has flushed the buffer
+            self.audioRecorder.onSpeechSegment = nil
+            self.isIncrementalMode = false
+
+            // If we got incremental results, use those instead of re-transcribing
+            if !self.incrementalText.isEmpty {
+                self.finishIncrementalTranscription(audioURL: audioURL)
+                return
+            }
+
+            // Otherwise, fall back to full transcription
+            guard let url = audioURL else {
                 print("✗ No audio")
-                self?.recordingOverlay.hide()
-                self?.statusBarController.setState(.idle)
+                self.recordingOverlay.hide()
+                self.statusBarController.setState(.idle)
                 return
             }
 
             self.startTranscription(audioURL: url)
         }
+    }
+
+    private func finishIncrementalTranscription(audioURL: URL?) {
+        // Wait for any pending segment transcriptions
+        if pendingSegments > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.finishIncrementalTranscription(audioURL: audioURL)
+            }
+            return
+        }
+
+        recordingOverlay.hide()
+        statusBarController.setState(.idle)
+
+        // Restore the original system default input device
+        AudioInputManager.shared.restoreSavedDefault()
+
+        let combinedText = incrementalText.joined(separator: " ")
+        let totalTime = totalStartTime.map { Date().timeIntervalSince($0) } ?? 0
+
+        if !combinedText.isEmpty {
+            print("✓ Final: \(combinedText)")
+            print("  ⏱ total: \(Int(totalTime * 1000))ms (incremental)")
+            historyManager.add(combinedText, audioURL: audioURL)
+        } else {
+            print("✗ No incremental results")
+        }
+
+        // Clean up
+        incrementalText = []
+        asrEngine.collectGarbage()
     }
 
     private func startTranscription(audioURL: URL) {
@@ -216,6 +307,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         removeEscMonitor()
         recordingOverlay.hide()
         statusBarController.setState(.idle)
+        // Restore the original system default input device
+        AudioInputManager.shared.restoreSavedDefault()
         // Clean up any partial memory allocations
         asrEngine.collectGarbage()
         print("✗ Cancelled")
@@ -225,6 +318,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         isTranscribing = false
         removeEscMonitor()
         recordingOverlay.hide()
+
+        // Restore the original system default input device
+        AudioInputManager.shared.restoreSavedDefault()
 
         // Clean up Kotlin/Native memory after transcription
         asrEngine.collectGarbage()

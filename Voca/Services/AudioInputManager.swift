@@ -17,6 +17,34 @@ class AudioInputManager {
 
     private init() {}
 
+    // Saved device ID to restore after recording
+    private var savedDefaultDeviceID: AudioDeviceID?
+
+    /// Save the current system default input device (call before changing it)
+    func saveCurrentDefault() {
+        savedDefaultDeviceID = getDefaultInputDevice()
+        if let id = savedDefaultDeviceID {
+            let name = getInputDevices().first { $0.id == id }?.name ?? "Unknown"
+            print("Saved current default input: \(name) (ID: \(id))")
+        }
+    }
+
+    /// Restore the previously saved default input device
+    func restoreSavedDefault() {
+        guard let savedID = savedDefaultDeviceID else {
+            print("No saved default to restore")
+            return
+        }
+        // Verify the device still exists before restoring
+        if getInputDevices().contains(where: { $0.id == savedID }) {
+            setDefaultInputDevice(savedID)
+            print("Restored default input device")
+        } else {
+            print("Saved device no longer available, not restoring")
+        }
+        savedDefaultDeviceID = nil
+    }
+
     /// Get all available audio input devices
     func getInputDevices() -> [AudioInputDevice] {
         var devices = [AudioInputDevice]()
