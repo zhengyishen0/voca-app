@@ -19,8 +19,8 @@ class AudioRecorder {
 
     // Silence detection parameters
     private let silenceThreshold: Float = 0.02  // RMS threshold for silence (increased for mic noise floor)
-    private let silenceDuration: Double = 0.5   // Seconds of silence to trigger segment end
-    private let minSpeechDuration: Double = 0.5 // Minimum speech duration to process
+    private let silenceDuration: Double = 1.2   // Seconds of silence to trigger segment end (longer to avoid breaking natural pauses)
+    private let minSpeechDuration: Double = 1.0 // Minimum speech duration to process
 
     // Speech segment tracking
     private var sampleBuffer: [Float] = []
