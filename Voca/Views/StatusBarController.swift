@@ -1,5 +1,6 @@
 import Cocoa
 import Sparkle
+import ServiceManagement
 
 enum RecordingState {
     case idle
@@ -11,6 +12,8 @@ class StatusBarController: NSObject {
     private var statusItem: NSStatusItem!
     private var menu: NSMenu!
     private var hintItem: NSMenuItem!
+    private var updateItem: NSMenuItem!
+    private var loginItem: NSMenuItem!
 
     private let updater: SPUUpdater
     private let onModelChange: (ASRModel) -> Void
@@ -64,6 +67,12 @@ class StatusBarController: NSObject {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        // Launch at Login
+        loginItem = NSMenuItem(title: NSLocalizedString("Launch at Login", comment: ""), action: #selector(toggleLoginItem), keyEquivalent: "")
+        loginItem.target = self
+        updateLoginItemState()
+        menu.addItem(loginItem)
+
         // License status
         let licenseItem = NSMenuItem(title: LicenseManager.shared.statusText, action: #selector(showLicense), keyEquivalent: "")
         licenseItem.target = self
@@ -76,7 +85,7 @@ class StatusBarController: NSObject {
         menu.addItem(licenseItem)
 
         // Check for Updates
-        let updateItem = NSMenuItem(title: NSLocalizedString("Check for Updates...", comment: ""), action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem = NSMenuItem(title: NSLocalizedString("Check for Updates...", comment: ""), action: #selector(checkForUpdates), keyEquivalent: "")
         updateItem.target = self
         menu.addItem(updateItem)
 
@@ -117,6 +126,23 @@ class StatusBarController: NSObject {
             name: .licenseStatusChanged,
             object: nil
         )
+
+        // Listen for update availability changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleUpdateAvailabilityChanged(_:)),
+            name: .updateAvailabilityChanged,
+            object: nil
+        )
+    }
+
+    @objc private func handleUpdateAvailabilityChanged(_ notification: Notification) {
+        guard let isAvailable = notification.object as? Bool else { return }
+        if isAvailable {
+            updateItem.title = NSLocalizedString("New Updates", comment: "")
+        } else {
+            updateItem.title = NSLocalizedString("Check for Updates...", comment: "")
+        }
     }
 
     @objc private func handleLicenseChanged() {
@@ -145,6 +171,25 @@ class StatusBarController: NSObject {
 
     @objc private func settingsClicked() {
         SettingsWindowController.shared.show()
+    }
+
+    @objc private func toggleLoginItem() {
+        let service = SMAppService.mainApp
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            print("Failed to toggle login item: \(error)")
+        }
+        updateLoginItemState()
+    }
+
+    private func updateLoginItemState() {
+        let service = SMAppService.mainApp
+        loginItem.state = service.status == .enabled ? .on : .off
     }
 
     @objc private func aboutClicked() {
