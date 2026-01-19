@@ -1,0 +1,2 @@
+1. do not show the accessibility popup when user hit grant permission on the onboarding page. just show the settings window.
+2. the voca app sometimes frozen and need to restart. and have to use monitor to kill it as the menubar icon would also disappear.
