@@ -265,7 +265,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         result = result.replacingOccurrences(of: " ,", with: ",")  // Space before comma
         result = result.replacingOccurrences(of: " \\.", with: ".", options: .regularExpression)  // Space before period
 
-        // 4. Capitalize first letter
+        // 4. Clean up duplicate/mixed punctuation
+        // Detect if text is primarily Chinese (contains CJK characters)
+        let isChinese = result.range(of: "\\p{Han}", options: .regularExpression) != nil
+
+        if isChinese {
+            // Chinese text: normalize to Chinese punctuation
+            result = result.replacingOccurrences(of: "[。.]{2,}", with: "。", options: .regularExpression)  // Multiple periods → 。
+            result = result.replacingOccurrences(of: "[，,]{2,}", with: "，", options: .regularExpression)  // Multiple commas → ，
+            result = result.replacingOccurrences(of: "。\\.", with: "。", options: .regularExpression)  // 。. → 。
+            result = result.replacingOccurrences(of: "\\.。", with: "。", options: .regularExpression)  // .。 → 。
+            result = result.replacingOccurrences(of: "，,", with: "，")  // ，, → ，
+            result = result.replacingOccurrences(of: ",，", with: "，")  // ,， → ，
+            result = result.replacingOccurrences(of: "，。", with: "。")  // Comma before period → period
+            result = result.replacingOccurrences(of: "。，", with: "，")  // Period before comma → comma
+            result = result.replacingOccurrences(of: "[？?]{2,}", with: "？", options: .regularExpression)
+            result = result.replacingOccurrences(of: "[！!]{2,}", with: "！", options: .regularExpression)
+        } else {
+            // English text: normalize to English punctuation
+            result = result.replacingOccurrences(of: "\\.{2,}", with: ".", options: .regularExpression)  // Multiple periods → .
+            result = result.replacingOccurrences(of: ",{2,}", with: ",", options: .regularExpression)  // Multiple commas → ,
+            result = result.replacingOccurrences(of: ",\\.", with: ".", options: .regularExpression)  // Comma before period → period
+            result = result.replacingOccurrences(of: "\\.,", with: ",", options: .regularExpression)  // Period before comma → comma
+            result = result.replacingOccurrences(of: "\\?{2,}", with: "?", options: .regularExpression)
+            result = result.replacingOccurrences(of: "!{2,}", with: "!", options: .regularExpression)
+        }
+
+        // 5. Capitalize first letter (for English text)
         if let first = result.first {
             result = first.uppercased() + result.dropFirst()
         }
