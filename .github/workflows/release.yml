@@ -124,28 +124,25 @@ jobs:
 
       - name: Update appcast.xml
         run: |
-          # Generate the new item XML
           PUBDATE=$(date -R)
 
-          cat > new_item.xml << EOF
-    <item>
-      <title>Version ${{ env.VERSION }}</title>
-      <pubDate>${PUBDATE}</pubDate>
-      <sparkle:version>${BUILD_NUMBER}</sparkle:version>
-      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-      <enclosure
-        url="https://github.com/zhengyishen0/voca-app/releases/download/v${VERSION}/Voca-${VERSION}.dmg"
-        sparkle:edSignature="${SPARKLE_SIGNATURE}"
-        length="${DMG_SIZE}"
-        type="application/octet-stream"/>
-    </item>
-  EOF
+          # Build new item XML
+          echo "    <item>" > new_item.xml
+          echo "      <title>Version ${VERSION}</title>" >> new_item.xml
+          echo "      <pubDate>${PUBDATE}</pubDate>" >> new_item.xml
+          echo "      <sparkle:version>${BUILD_NUMBER}</sparkle:version>" >> new_item.xml
+          echo "      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>" >> new_item.xml
+          echo "      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>" >> new_item.xml
+          echo "      <enclosure" >> new_item.xml
+          echo "        url=\"https://github.com/zhengyishen0/voca-app/releases/download/v${VERSION}/Voca-${VERSION}.dmg\"" >> new_item.xml
+          echo "        sparkle:edSignature=\"${SPARKLE_SIGNATURE}\"" >> new_item.xml
+          echo "        length=\"${DMG_SIZE}\"" >> new_item.xml
+          echo "        type=\"application/octet-stream\"/>" >> new_item.xml
+          echo "    </item>" >> new_item.xml
 
-          # Insert the new item after the language tag in appcast.xml
+          # Insert after language tag
           sed -i '' "/<language>en<\/language>/r new_item.xml" docs/appcast.xml
           rm new_item.xml
-
           cat docs/appcast.xml
 
       - name: Commit appcast.xml
