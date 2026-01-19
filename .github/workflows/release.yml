@@ -194,15 +194,15 @@ jobs:
           echo "    </item>" >> new_item.xml
 
           # Insert after language tag
-          sed -i '' "/<language>en<\/language>/r new_item.xml" docs/appcast.xml
+          sed -i '' "/<language>en<\/language>/r new_item.xml" appcast.xml
           rm new_item.xml
-          cat docs/appcast.xml
+          cat appcast.xml
 
       - name: Commit appcast.xml
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/appcast.xml
+          git add appcast.xml
           git commit -m "Update appcast.xml for v${{ env.VERSION }}"
           git push origin HEAD:main
 
