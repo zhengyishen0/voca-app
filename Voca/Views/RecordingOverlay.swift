@@ -1,12 +1,28 @@
 import Cocoa
 
+enum OverlayMode {
+    case listening
+    case processing
+}
+
 class RecordingOverlay {
     private var overlayWindow: NSWindow?
     private var waveformView: WaveformView?
 
     func show() {
         DispatchQueue.main.async { [weak self] in
-            self?.doShow()
+            self?.doShow(mode: .listening)
+        }
+    }
+
+    func showProcessing() {
+        DispatchQueue.main.async { [weak self] in
+            if self?.overlayWindow != nil {
+                // Already showing, just switch mode
+                self?.waveformView?.setMode(.processing)
+            } else {
+                self?.doShow(mode: .processing)
+            }
         }
     }
 
@@ -22,7 +38,7 @@ class RecordingOverlay {
         }
     }
 
-    private func doShow() {
+    private func doShow(mode: OverlayMode) {
         guard overlayWindow == nil else { return }
 
         guard let screen = NSScreen.main else { return }
@@ -48,13 +64,14 @@ class RecordingOverlay {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         let waveform = WaveformView(frame: NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight))
+        waveform.setMode(mode)
         window.contentView = waveform
         waveformView = waveform
 
         window.orderFrontRegardless()
         overlayWindow = window
 
-        // Start idle animation
+        // Start animation
         waveformView?.startAnimation()
     }
 
@@ -73,12 +90,17 @@ class WaveformView: NSView {
     private var displayLink: CVDisplayLink?
     private var lastUpdateTime: CFTimeInterval = 0
     private var currentLevel: Float = 0
+    private var mode: OverlayMode = .listening
 
     private let minBarHeight: CGFloat = 6
     private let maxBarHeight: CGFloat = 24
     private let barWidth: CGFloat = 6
     private let barSpacing: CGFloat = 5
     private let cornerRadius: CGFloat = 3
+
+    // Processing animation state
+    private let dotCount = 3
+    private var dotOpacities: [CGFloat] = [1.0, 0.5, 0.3]
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -90,7 +112,13 @@ class WaveformView: NSView {
         fatalError("init(coder:) not implemented")
     }
 
+    func setMode(_ newMode: OverlayMode) {
+        mode = newMode
+        needsDisplay = true
+    }
+
     func updateLevel(_ level: Float) {
+        guard mode == .listening else { return }
         currentLevel = level
 
         // Update target heights based on audio level with some randomness for natural look
@@ -117,7 +145,13 @@ class WaveformView: NSView {
     }
 
     private func animateStep() {
-        // Smooth interpolation toward target heights
+        if mode == .processing {
+            // Rotating dots animation
+            needsDisplay = true
+            return
+        }
+
+        // Listening mode: smooth interpolation toward target heights
         let smoothing: CGFloat = 0.3
         var needsRedraw = false
 
@@ -159,6 +193,14 @@ class WaveformView: NSView {
         bgPath.lineWidth = 1
         bgPath.stroke()
 
+        if mode == .processing {
+            drawProcessingAnimation()
+        } else {
+            drawWaveformAnimation()
+        }
+    }
+
+    private func drawWaveformAnimation() {
         // Calculate total width of bars
         let totalBarsWidth = CGFloat(barCount) * barWidth + CGFloat(barCount - 1) * barSpacing
         let startX = (bounds.width - totalBarsWidth) / 2
@@ -183,6 +225,41 @@ class WaveformView: NSView {
             .foregroundColor: NSColor.white.withAlphaComponent(0.6)
         ]
         let text = "Listening"
+        let textSize = text.size(withAttributes: textAttributes)
+        let textX = (bounds.width - textSize.width) / 2
+        let textY: CGFloat = 6
+        text.draw(at: NSPoint(x: textX, y: textY), withAttributes: textAttributes)
+    }
+
+    private func drawProcessingAnimation() {
+        let centerY = bounds.height / 2 + 4
+        let dotSize: CGFloat = 8
+        let dotSpacing: CGFloat = 12
+        let totalDotsWidth = CGFloat(dotCount) * dotSize + CGFloat(dotCount - 1) * dotSpacing
+        let startX = (bounds.width - totalDotsWidth) / 2
+
+        // Animated opacity based on time - creates a "wave" effect
+        let time = CACurrentMediaTime()
+        let speed = 3.0
+
+        for i in 0..<dotCount {
+            let phase = Double(i) * 0.4
+            let opacity = (sin(time * speed - phase) + 1.0) / 2.0 * 0.7 + 0.3
+
+            let x = startX + CGFloat(i) * (dotSize + dotSpacing)
+            let dotRect = NSRect(x: x, y: centerY - dotSize / 2, width: dotSize, height: dotSize)
+            let dotPath = NSBezierPath(ovalIn: dotRect)
+
+            NSColor.white.withAlphaComponent(CGFloat(opacity)).setFill()
+            dotPath.fill()
+        }
+
+        // Draw "Processing" text below dots
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 9, weight: .medium),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.6)
+        ]
+        let text = "Processing"
         let textSize = text.size(withAttributes: textAttributes)
         let textX = (bounds.width - textSize.width) / 2
         let textY: CGFloat = 6

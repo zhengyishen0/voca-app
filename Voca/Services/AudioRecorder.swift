@@ -24,6 +24,9 @@ class AudioRecorder {
             // Set input device if user has selected one
             configureInputDevice(for: inputNode)
 
+            // Note: Voice processing (setVoiceProcessingEnabled) disabled for now
+            // It changes audio format and may conflict with custom input devices
+
             // Create temp file for recording
             let tempDir = FileManager.default.temporaryDirectory
             let fileName = "voice_\(Date().timeIntervalSince1970).wav"

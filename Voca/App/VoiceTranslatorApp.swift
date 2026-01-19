@@ -27,6 +27,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var totalStartTime: Date?
     private var isTranscribing = false
     private var escMonitor: Any?
+    private var transcriptionTimeoutTask: DispatchWorkItem?
+    private let transcriptionTimeoutSeconds: TimeInterval = 30
 
     // Model paths - CoreML models downloaded to Application Support, assets bundled
     private var modelDir: String {
@@ -150,12 +152,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopRecordingAndTranscribe() {
         totalStartTime = Date()  // Start total timing when CMD released
-        recordingOverlay.hide()
         audioRecorder.onAudioLevel = nil
+
+        // Switch overlay to processing mode instead of hiding
+        recordingOverlay.showProcessing()
 
         audioRecorder.stopRecording { [weak self] audioURL in
             guard let self = self, let url = audioURL else {
                 print("✗ No audio")
+                self?.recordingOverlay.hide()
                 self?.statusBarController.setState(.idle)
                 return
             }
@@ -174,9 +179,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Set up timeout to prevent indefinite hangs
+        let timeoutTask = DispatchWorkItem { [weak self] in
+            guard let self = self, self.isTranscribing else { return }
+            print("⚠️ Transcription timed out after \(Int(self.transcriptionTimeoutSeconds))s")
+            self.cancelTranscription()
+        }
+        transcriptionTimeoutTask = timeoutTask
+        DispatchQueue.main.asyncAfter(deadline: .now() + transcriptionTimeoutSeconds, execute: timeoutTask)
+
         transcriber.transcribe(audioURL: audioURL) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self, self.isTranscribing else { return }
+                self.transcriptionTimeoutTask?.cancel()
+                self.transcriptionTimeoutTask = nil
                 self.finishTranscription(result: result)
             }
         }
@@ -185,7 +201,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func cancelTranscription() {
         guard isTranscribing else { return }
         isTranscribing = false
+        transcriptionTimeoutTask?.cancel()
+        transcriptionTimeoutTask = nil
         removeEscMonitor()
+        recordingOverlay.hide()
         statusBarController.setState(.idle)
         print("✗ Cancelled")
     }
@@ -193,6 +212,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishTranscription(result: TranscriptionResult) {
         isTranscribing = false
         removeEscMonitor()
+        recordingOverlay.hide()
 
         let totalTime = totalStartTime.map { Date().timeIntervalSince($0) } ?? 0
         let modelTime = result.modelTime
@@ -291,6 +311,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        transcriptionTimeoutTask?.cancel()
         removeEscMonitor()
     }
 
