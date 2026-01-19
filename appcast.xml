@@ -6,6 +6,18 @@
     <description>Voice-to-text transcription for macOS</description>
     <language>en</language>
     <item>
+      <title>Version 1.2.5</title>
+      <pubDate>Mon, 19 Jan 2026 13:54:11 +0000</pubDate>
+      <sparkle:version>87</sparkle:version>
+      <sparkle:shortVersionString>1.2.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="https://github.com/zhengyishen0/voca-app/releases/download/v1.2.5/Voca-1.2.5.dmg"
+        sparkle:edSignature="kSOEfexj76HuL5RSJyG/otnlTfxK6KamcAtskx+0ytdVXT4NUaqKOHLQ5O5NYyjhw5PcohdEMh4wGbKNqVSlAw=="
+        length="17586226"
+        type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Version 1.2.4</title>
       <pubDate>Mon, 19 Jan 2026 13:45:34 +0000</pubDate>
       <sparkle:version>85</sparkle:version>
