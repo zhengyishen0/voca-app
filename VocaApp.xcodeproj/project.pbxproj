@@ -41,7 +41,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Get the latest git tag (e.g., v1.0.17)\nGIT_TAG=$(git -C \"${SRCROOT}\" describe --tags --abbrev=0 2>/dev/null || echo \"v1.0.0\")\n\n# Remove the 'v' prefix to get version number (e.g., 1.0.17)\nVERSION=${GIT_TAG#v}\n\n# Extract build number (last component, e.g., 17 from 1.0.17)\nBUILD_NUMBER=$(echo \"$VERSION\" | awk -F. '{print $NF}')\n\n# Update Info.plist in the built app\necho \"Setting version to $VERSION (build $BUILD_NUMBER) from tag $GIT_TAG\"\n/usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString $VERSION\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD_NUMBER\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n";
+			shellScript = "# Get the latest git tag (e.g., v1.2.5)\nGIT_TAG=$(git -C \"${SRCROOT}\" describe --tags --abbrev=0 2>/dev/null || echo \"v1.0.0\")\n\n# Remove the 'v' prefix to get version number (e.g., 1.2.5)\nVERSION=${GIT_TAG#v}\n\n# Use git commit count as build number\nBUILD_NUMBER=$(git -C \"${SRCROOT}\" rev-list --count HEAD 2>/dev/null || echo \"1\")\n\n# Update Info.plist in the built app\necho \"Setting version to $VERSION (build $BUILD_NUMBER) from tag $GIT_TAG\"\n/usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString $VERSION\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD_NUMBER\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null || true\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
