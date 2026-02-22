@@ -102,7 +102,8 @@ class AudioRecorder {
         isRecording = false
 
         // Process any remaining speech in buffer (call synchronously so it runs before completion)
-        if !sampleBuffer.isEmpty && sampleBuffer.count > Int(sampleRate * minSpeechDuration) {
+        // Use lower threshold (0.3s) than normal minSpeechDuration to avoid cutting off short final words
+        if !sampleBuffer.isEmpty && sampleBuffer.count > Int(sampleRate * 0.3) {
             let segment = sampleBuffer
             sampleBuffer = []
             print("📝 Flushing final segment: \(segment.count) samples")

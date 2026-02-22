@@ -377,6 +377,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("✗ No incremental results")
         }
 
+        // Clean up temp recording file (HistoryManager already copied it to permanent storage)
+        if let url = audioURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+
         // Clean up
         incrementalText = []
         asrEngine.collectGarbage()
@@ -458,6 +463,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("✓ \(cleanedText)")
             print("  ⏱ model: \(modelMs)ms | total: \(totalMs)ms")
             historyManager.add(cleanedText, audioURL: currentAudioURL)
+            // Clean up temp recording file (HistoryManager already copied it to permanent storage)
+            if let url = currentAudioURL {
+                try? FileManager.default.removeItem(at: url)
+            }
             currentAudioURL = nil
             pasteText(cleanedText)
         } else {
