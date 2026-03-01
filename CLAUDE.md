@@ -101,3 +101,24 @@ Hotkey → `AudioRecorder` (16kHz mono, energy VAD) → speech segments on 1.2s 
 - **TCC is per-signature**: Re-signing the binary (e.g., adding `--entitlements`) invalidates macOS accessibility permissions. Use `AXIsProcessTrustedWithOptions(prompt: true)` to re-prompt correctly, not just opening System Settings.
 - **Model switching is a no-op**: `Transcriber.setModel()` does nothing — KMP `ASREngine` has no model selection API. Always uses the model loaded at startup.
 - **`swift build` fails on Sparkle imports**: Expected. Use `xcodebuild` for full builds.
+
+## Audio Processing Learnings (2026-03-01)
+
+### VAD Audio Cut-Off Root Cause (3 interacting bugs)
+1. High flush threshold (1.0s) dropped segments <1 second
+2. Race condition: callback cleared before async transcription completed
+3. Fixed silence removal (1.2s) even when actual silence was shorter
+
+### Voice Isolation > Noise Cancellation
+- Noise cancellation removes speech-adjacent frequencies → hurts ASR accuracy
+- Zhengyi's previous NC attempt failed due to encoding/decoding mismatch
+- Silero VAD segments audio without modifying it (ONNX, already in stack)
+
+### Hot Words Approach
+- KMP ASREngine is a black box — no prompt/decoder API
+- Only viable path: post-processing correction map in `Transcriber.postProcessText()`
+- TCPGen trie biasing (30% WER reduction) requires decoder access — future
+
+### Quick Wins Available
+- `AVAudioEngine.setVoiceProcessingEnabled(true)` — 2-line noise suppression
+- Apple macOS 26: `SpeechAnalyzer` + `SpeechTranscriber` = potential full ASR replacement
